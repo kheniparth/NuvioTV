@@ -3496,6 +3496,10 @@
 
     <string name="settings_live_tv">Live TV</string>
     <string name="settings_live_tv_subtitle">M3U playlists, Xtream, Stalker Portal and EPG sources.</string>
+    <string name="livetv_guide_title">Live TV Guide</string>
+    <string name="livetv_guide_all">All</string>
+    <string name="livetv_guide_empty">No channels to show. Add a Live TV source in Settings.</string>
+    <string name="livetv_guide_load_failed">Could not load the guide.</string>
     <string name="livetv_m3u_section">M3U playlists</string>
     <string name="livetv_xtream_section">Xtream</string>
     <string name="livetv_stalker_section">Stalker Portal</string>

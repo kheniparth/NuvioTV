@@ -223,4 +223,6 @@ sealed class Screen(val route: String) {
             return "tmdb_entity_browse/${encode(entityKind)}/$entityId/${encode(entityName)}?sourceType=${encode(sourceType)}"
         }
     }
+
+    data object LiveTvGuide : Screen("live_tv_guide")
 }
