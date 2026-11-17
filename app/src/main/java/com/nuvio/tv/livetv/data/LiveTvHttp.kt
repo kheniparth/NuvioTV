@@ -37,6 +37,25 @@ class LiveTvHttp @Inject constructor(client: OkHttpClient) {
         return response.body
     }
 
+    /** Bytes, so a gzip XMLTV file is not decoded as text. */
+    suspend fun getBytes(url: String, headers: Map<String, String> = emptyMap()): ByteArray =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .apply {
+                    headers.forEach { (key, value) ->
+                        header(key, value)
+                        if (key.equals("User-Agent", ignoreCase = true)) header(USER_AGENT_OVERRIDE, value)
+                    }
+                }
+                .build()
+            http.newCall(request).execute().use { response ->
+                if (response.code !in 200..299) error("HTTP ${response.code}")
+                response.body?.bytes() ?: ByteArray(0)
+            }
+        }
+
     suspend fun requestRaw(
         method: String,
         url: String,

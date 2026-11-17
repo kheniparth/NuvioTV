@@ -47,7 +47,13 @@ data class LiveTvSettings(
     val epgSources: List<LiveTvEpgSource> = emptyList(),
     val favoriteChannelIds: List<String> = emptyList(),
     val recentChannelIds: List<String> = emptyList(),
-)
+) {
+    /** A saved source counts even when it is disabled. Blank fields do not. */
+    fun hasConfiguredSource(): Boolean =
+        playlists.any { it.source.isNotBlank() } ||
+            (xtream.serverUrl.isNotBlank() && xtream.username.isNotBlank() && xtream.password.isNotBlank()) ||
+            (stalker.portalUrl.isNotBlank() && stalker.macAddress.isNotBlank())
+}
 
 internal const val LIVE_TV_MAX_RECENT_CHANNELS = 50
 
