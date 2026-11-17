@@ -10,8 +10,11 @@ import androidx.compose.ui.layout.boundsInWindow
 import android.graphics.RectF
 import com.nuvio.tv.ui.screens.detail.formatPlaybackTime
 import com.nuvio.tv.ui.theme.NuvioMotion
-import kotlinx.coroutines.delay
 
+import com.nuvio.tv.livetv.data.LiveTvChannel
+import com.nuvio.tv.livetv.ui.LiveTvChannelsPanel
+import com.nuvio.tv.livetv.ui.LiveTvPlayRequest
+import com.nuvio.tv.livetv.ui.rememberLiveTvPlayback
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.accentBrush
 
@@ -68,6 +71,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -82,6 +86,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -170,8 +175,10 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.media3.exoplayer.ExoPlayer
@@ -211,7 +218,8 @@ fun PlayerScreen(
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?, exitReason: PlayerExitReason?) -> Unit)? = null,
     onPlayRecommendation: (PostPlayRecommendation, manualSelection: Boolean) -> Unit = { _, _ -> },
     onOpenRecommendationDetails: (PostPlayRecommendation) -> Unit = {},
-    onOpenPartyMedia: (PartyMedia) -> Unit = {}
+    onOpenPartyMedia: (PartyMedia) -> Unit = {},
+    onSwitchLiveChannel: (LiveTvPlayRequest) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val playerBadges = rememberPlayerBadges(viewModel, uiState)
@@ -232,6 +240,28 @@ fun PlayerScreen(
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsState(initial = false)
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val livePlayback = rememberLiveTvPlayback()
+    val liveScope = rememberCoroutineScope()
+    var showLiveChannels by remember { mutableStateOf(false) }
+    var liveSwitching by remember { mutableStateOf(false) }
+    val onSwitchLiveChannelState by rememberUpdatedState(onSwitchLiveChannel)
+    val requestLiveChannel = { channel: LiveTvChannel ->
+        if (channel.id != livePlayback.currentId && !liveSwitching) {
+            liveSwitching = true
+            liveScope.launch {
+                try {
+                    val request = livePlayback.playable(channel)
+                    livePlayback.markCurrent(channel.id)
+                    onSwitchLiveChannelState(request)
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    liveSwitching = false
+                }
+            }
+        }
+    }
+    val liveZap = uiState.contentType == "channel" && livePlayback.inCategory().isNotEmpty()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val containerFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -413,6 +443,8 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
         } else if (uiState.postPlayMode is PostPlayMode.StillWatching) {
             viewModel.onEvent(PlayerEvent.OnDismissStillWatchingPrompt)
+        } else if (showLiveChannels) {
+            showLiveChannels = false
         } else if (uiState.showControls) {
             viewModel.hideControls()
         } else {
@@ -842,6 +874,7 @@ fun PlayerScreen(
                         shouldConfirmNextEpisodeOnEnd ||
                         uiState.postPlayMode is PostPlayMode.StillWatching ||
                         postPlayRecommendationState.isVisible ||
+                        showLiveChannels ||
                         uiState.error != null
                 if (panelOrDialogOpen) return@onKeyEvent false
 
@@ -880,7 +913,10 @@ fun PlayerScreen(
                     }
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            if (!uiState.showControls) {
+                            if (!uiState.showControls && liveZap) {
+                                viewModel.onEvent(PlayerEvent.OnToggleControls)
+                                true
+                            } else if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnPlayPause)
                                 true
                             } else {
@@ -908,7 +944,9 @@ fun PlayerScreen(
                             }
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                                if (!uiState.showControls) {
+                                if (!uiState.showControls && liveZap) {
+                                    livePlayback.adjacent(next = true)?.let(requestLiveChannel)
+                                } else if (!uiState.showControls) {
                                     viewModel.onEvent(PlayerEvent.OnToggleControls)
                                 } else {
                                     try {
@@ -933,7 +971,10 @@ fun PlayerScreen(
                                 true
                             }
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (!uiState.showControls) {
+                            if (!uiState.showControls && liveZap) {
+                                livePlayback.adjacent(next = false)?.let(requestLiveChannel)
+                                true
+                            } else if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnToggleControls)
                                 true
                             } else {
@@ -965,7 +1006,12 @@ fun PlayerScreen(
                         KeyEvent.KEYCODE_CHANNEL_UP,
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                         KeyEvent.KEYCODE_CHANNEL_DOWN -> {
-                            if (uiState.chapters.isEmpty()) {
+                            if (liveZap) {
+                                val next = keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
+                                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_CHANNEL_UP
+                                livePlayback.adjacent(next)?.let(requestLiveChannel)
+                                true
+                            } else if (uiState.chapters.isEmpty()) {
                                 false
                             } else {
                                 val forward = keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
@@ -1648,6 +1694,14 @@ fun PlayerScreen(
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
                 onShowChaptersPanel = { viewModel.onEvent(PlayerEvent.OnShowChaptersPanel) },
                 onShowEpisodesPanel = { viewModel.onEvent(PlayerEvent.OnShowEpisodesPanel) },
+                onShowLiveChannels = if (liveZap) {
+                    {
+                        viewModel.hideControls()
+                        showLiveChannels = true
+                    }
+                } else {
+                    null
+                },
                 onShowSourcesPanel = { viewModel.onEvent(PlayerEvent.OnShowSourcesPanel) },
                 onShowPartyPanel = if (partyAvailable && viewModel.canUseParty) {
                     { viewModel.onEvent(PlayerEvent.OnShowPartyPanel) }
@@ -1869,6 +1923,25 @@ fun PlayerScreen(
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
+        }
+
+        if (showLiveChannels && uiState.error == null && liveZap) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .zIndex(3.5f)
+            )
+            LiveTvChannelsPanel(
+                onChannelSelected = { channel ->
+                    showLiveChannels = false
+                    requestLiveChannel(channel)
+                },
+                playback = livePlayback,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .zIndex(3.6f)
+            )
         }
 
         // Episodes/streams side panel (slides in from right)
@@ -2778,6 +2851,7 @@ private fun PlayerControlsOverlay(
     onSeekTo: (Long) -> Unit,
     onShowChaptersPanel: () -> Unit,
     onShowEpisodesPanel: () -> Unit,
+    onShowLiveChannels: (() -> Unit)? = null,
     onShowSourcesPanel: () -> Unit,
     onShowPartyPanel: (() -> Unit)?,
     partyActive: Boolean,
@@ -3012,6 +3086,17 @@ private fun PlayerControlsOverlay(
                         onDownKey = onHideControls,
                         onFocused = onResetHideTimer
                     )
+
+                    if (onShowLiveChannels != null) {
+                        ControlButton(
+                            icon = Icons.Default.LiveTv,
+                            contentDescription = stringResource(R.string.livetv_channels),
+                            onClick = onShowLiveChannels,
+                            upFocusRequester = progressUpTarget,
+                            onDownKey = onHideControls,
+                            onFocused = onResetHideTimer
+                        )
+                    }
 
                     if (showNextEpisodeButton) {
                         ControlButton(

@@ -64,7 +64,7 @@ class ChannelsViewModelTest {
     @Test
     fun `favourite toggle updates the list and the favourites category`() = runTest {
         val repository = repository(catalog())
-        val viewModel = ChannelsViewModel(repository)
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
         runCurrent()
 
         viewModel.toggleFavorite("c1")
@@ -87,7 +87,7 @@ class ChannelsViewModelTest {
         val repository = repository(catalog())
         coEvery { repository.resolvePlayableUrl(any()) } returns
             LiveTvPlayable("http://play", mapOf("User-Agent" to "VLC"))
-        val viewModel = ChannelsViewModel(repository)
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
         val plays = mutableListOf<LiveTvPlayRequest>()
         val collect = launch { viewModel.playRequests.collect { plays += it } }
         runCurrent()
@@ -108,7 +108,7 @@ class ChannelsViewModelTest {
     fun `a failed play does not record a recent`() = runTest {
         val repository = repository(catalog())
         coEvery { repository.resolvePlayableUrl(any()) } throws IllegalStateException("no link")
-        val viewModel = ChannelsViewModel(repository)
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
         runCurrent()
 
         viewModel.play(catalog().channels.first())
@@ -118,7 +118,29 @@ class ChannelsViewModelTest {
         coVerify(exactly = 0) { repository.recordRecent(any()) }
     }
 
-    private fun viewModel(catalog: LiveTvCatalog) = ChannelsViewModel(repository(catalog))
+    @Test
+    fun `next and previous wrap and stay in the category`() {
+        val channels = catalog().channels
+        val favorites = catalog().favoriteIds
+        val news = ChannelCategory.Group("News")
+
+        assertEquals("c2", adjacentChannel(channels, favorites, ChannelCategory.All, "c1", next = true)?.id)
+        assertEquals("c1", adjacentChannel(channels, favorites, ChannelCategory.All, "c3", next = true)?.id)
+        assertEquals("c3", adjacentChannel(channels, favorites, ChannelCategory.All, "c1", next = false)?.id)
+
+        assertEquals("c3", adjacentChannel(channels, favorites, news, "c1", next = true)?.id)
+        assertEquals("c1", adjacentChannel(channels, favorites, news, "c3", next = true)?.id)
+        assertEquals("c3", adjacentChannel(channels, favorites, news, "c1", next = false)?.id)
+        assertEquals("c1", adjacentChannel(channels, favorites, news, "missing", next = true)?.id)
+
+        assertEquals("c2", adjacentChannel(channels, favorites, ChannelCategory.Favourites, "c2", next = true)?.id)
+        assertNull(adjacentChannel(emptyList(), emptySet(), ChannelCategory.All, "c1", next = true))
+    }
+
+    private fun viewModel(catalog: LiveTvCatalog): ChannelsViewModel {
+        val repository = repository(catalog)
+        return ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
+    }
 
     private fun repository(catalog: LiveTvCatalog): LiveTvRepository = mockk {
         coEvery { loadCatalog(any()) } returns catalog

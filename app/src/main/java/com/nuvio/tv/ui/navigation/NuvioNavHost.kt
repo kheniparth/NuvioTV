@@ -1176,6 +1176,21 @@ private fun PlaybackNavHost(
                     )
                 },
                 onOpenPartyMedia = ::openPartyMedia,
+                onSwitchLiveChannel = { request ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = request.streamUrl,
+                            title = request.title,
+                            headers = request.headers,
+                            contentType = "channel",
+                            logo = request.logoUrl,
+                            poster = request.logoUrl,
+                        )
+                    ) {
+                        popUpTo(Screen.Player.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onPlaybackErrorBack = {
                     val returnedToStream = popBackToStream()
                     if (!returnedToStream) {
