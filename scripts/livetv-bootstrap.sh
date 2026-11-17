@@ -63,7 +63,7 @@ if [[ "$dry" -eq 1 ]]; then
 fi
 
 if [[ -n "${ADB:-}" ]]; then adb_bin="$ADB"
-elif command -v adb >/dev/null 2>&1; then adb_bin=adb
+elif command -v adb >/dev/null 2>&1; then adb_bin="$(command -v adb)"
 elif [[ -x "$HOME/Android/Sdk/platform-tools/adb" ]]; then adb_bin="$HOME/Android/Sdk/platform-tools/adb"
 else echo "adb not found" >&2; exit 1; fi
 adb() { "$adb_bin" -s "$serial" "$@"; }
@@ -78,6 +78,9 @@ if ! adb exec-out run-as "$package" cat "$file" >"$tmp/cur" 2>"$tmp/err"; then
     exit 1
   fi
 fi
+# exec-out reports run-as errors on stdout with exit 0.
+if grep -q "No such file" "$tmp/cur"; then : >"$tmp/cur"
+elif grep -q "not debuggable" "$tmp/cur"; then echo "$package on $serial is not debuggable: build with -Pdebuggable=true" >&2; exit 1; fi
 
 set +e
 python3 "$root/scripts/livetv-bootstrap.py" <"$tmp/cur" >"$tmp/new"
