@@ -139,7 +139,9 @@ sealed class Screen(val route: String) {
             return "player/$encodedUrl/$encodedTitle?streamName=$encodedStreamName&year=$encodedYear&headers=$encodedHeaders&contentId=$encodedContentId&contentType=$encodedContentType&contentName=$encodedContentName&poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&videoId=$encodedVideoId&season=${season ?: ""}&episode=${episode ?: ""}&episodeTitle=$encodedEpisodeTitle&bingeGroup=$encodedBingeGroup&autoPlayNav=$autoPlayNav&returnToDetailOnBack=$returnToDetailOnBack&returnToHomeOnBack=$returnToHomeOnBack&filename=$encodedFilename&videoHash=$encodedVideoHash&videoSize=${videoSize ?: ""}&startFromBeginning=$startFromBeginning&addonName=$encodedAddonName&addonLogo=$encodedAddonLogo&streamDescription=$encodedStreamDescription&infoHash=$encodedInfoHash&fileIdx=${fileIdx ?: ""}&sources=$encodedSources&contentLanguage=$encodedContentLanguage&cloudSessionToken=$encodedCloudSessionToken&launchStartedAtMs=$launchStartedAtMs&profileId=${profileId ?: ""}&audioDelayMs=${audioDelayMs ?: ""}&audioDelayLanguage=$encodedAudioDelayLanguage&fromLinkCache=$fromLinkCache"
         }
     }
+    data object LiveTvSports : Screen("live_tv_sports")
     data object Search : Screen("search")
+    data object LiveTvOnDemand : Screen("livetv_on_demand")
     data object Discover : Screen("discover")
     data object Library : Screen("library")
     data object LiveTv : Screen("live_tv")
@@ -222,4 +224,6 @@ sealed class Screen(val route: String) {
             return "tmdb_entity_browse/${encode(entityKind)}/$entityId/${encode(entityName)}?sourceType=${encode(sourceType)}"
         }
     }
+
+    data object LiveTvGuide : Screen("live_tv_guide")
 }

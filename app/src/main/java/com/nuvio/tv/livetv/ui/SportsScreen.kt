@@ -1,0 +1,235 @@
+package com.nuvio.tv.livetv.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Text
+import com.nuvio.tv.R
+import com.nuvio.tv.livetv.data.LiveTvChannel
+import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.SportsGame
+import com.nuvio.tv.livetv.data.SportsScoreboard
+import com.nuvio.tv.livetv.data.SportsState
+import com.nuvio.tv.livetv.data.matchSportsChannels
+import com.nuvio.tv.ui.theme.NuvioTheme
+import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class SportsRow(val game: SportsGame, val channels: List<LiveTvChannel>)
+
+data class SportsUiState(
+    val loading: Boolean = true,
+    val error: String? = null,
+    val rows: List<SportsRow> = emptyList(),
+    val nowMillis: Long = 0L,
+)
+
+@HiltViewModel
+class SportsViewModel @Inject constructor(
+    private val scores: SportsScoreboard,
+    private val repository: LiveTvRepository,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow(SportsUiState())
+    val uiState: StateFlow<SportsUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            runCatching {
+                val games = scores.games(now)
+                val channels = repository.channels()
+                games.map { game -> SportsRow(game, matchSportsChannels(game, channels)) }
+            }.fold(
+                onSuccess = { rows -> _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now) },
+                onFailure = { error ->
+                    if (error is CancellationException) throw error
+                    _uiState.value = SportsUiState(loading = false, error = error.message, nowMillis = now)
+                },
+            )
+        }
+    }
+
+    suspend fun playable(channel: LiveTvChannel) = repository.resolvePlayableUrl(channel)
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SportsScreen(
+    onBackPress: () -> Unit,
+    onPlay: (url: String, headers: Map<String, String>, title: String) -> Unit,
+    viewModel: SportsViewModel = hiltViewModel(),
+) {
+    BackHandler { onBackPress() }
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var playing by remember { mutableStateOf(false) }
+    var playError by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.livetv_sports_title),
+            style = NuvioTheme.textStyles.headline,
+            color = NuvioTheme.colors.TextPrimary,
+        )
+        val message = playError ?: state.error
+        if (message != null) {
+            Text(text = message, color = NuvioTheme.colors.Error)
+        }
+        when {
+            state.loading -> Text(text = stringResource(R.string.livetv_sports_loading), color = NuvioTheme.colors.TextSecondary)
+            state.rows.isEmpty() && state.error == null ->
+                Text(text = stringResource(R.string.livetv_sports_empty), color = NuvioTheme.colors.TextSecondary)
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                items(state.rows, key = { "${it.game.leagueId}:${it.game.id}" }) { row ->
+                    SportsGameBlock(
+                        row = row,
+                        nowMillis = state.nowMillis,
+                        onChannel = { channel ->
+                            if (playing) return@SportsGameBlock
+                            playing = true
+                            scope.launch {
+                                try {
+                                    val playable = viewModel.playable(channel)
+                                    onPlay(playable.url, playable.headers, channel.name)
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (error: Exception) {
+                                    playing = false
+                                    playError = error.message
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SportsGameBlock(
+    row: SportsRow,
+    nowMillis: Long,
+    onChannel: (LiveTvChannel) -> Unit,
+) {
+    val game = row.game
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = game.leagueLabel,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = sportsStatus(game, nowMillis),
+                color = if (game.state == SportsState.Live) NuvioTheme.colors.Error else NuvioTheme.colors.TextPrimary,
+                maxLines = 1,
+            )
+        }
+        if (game.sides.size >= 2) {
+            game.sides.forEach { side ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = side.name,
+                        color = NuvioTheme.colors.TextPrimary,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (game.state != SportsState.Upcoming && !side.score.isNullOrBlank()) {
+                        Text(text = side.score, color = NuvioTheme.colors.TextPrimary)
+                    }
+                }
+            }
+        } else {
+            Text(text = game.name, color = NuvioTheme.colors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (row.channels.isEmpty()) {
+            if (game.state != SportsState.Finished) {
+                Text(
+                    text = stringResource(R.string.livetv_sports_no_channels),
+                    color = NuvioTheme.colors.TextSecondary,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.channels.forEach { channel ->
+                    Button(
+                        onClick = { onChannel(channel) },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioTheme.colors.BackgroundCard,
+                            contentColor = NuvioTheme.colors.TextPrimary,
+                        ),
+                    ) {
+                        Text(text = channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun sportsStatus(game: SportsGame, nowMillis: Long): String = when (game.state) {
+    SportsState.Live -> {
+        val badge = stringResource(R.string.livetv_sports_live)
+        if (game.statusDetail.isBlank()) badge else "$badge ${game.statusDetail}"
+    }
+    SportsState.Upcoming -> formatSportsStart(game.startMillis, nowMillis)
+    SportsState.Finished -> game.statusDetail.ifBlank { formatSportsStart(game.startMillis, nowMillis) }
+}
+
+private fun formatSportsStart(startMillis: Long, nowMillis: Long): String {
+    val zone = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(startMillis).atZone(zone)
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    val time = start.format(DateTimeFormatter.ofPattern("HH:mm"))
+    return if (start.toLocalDate() == today) time else "${start.format(DateTimeFormatter.ofPattern("dd/MM"))} $time"
+}

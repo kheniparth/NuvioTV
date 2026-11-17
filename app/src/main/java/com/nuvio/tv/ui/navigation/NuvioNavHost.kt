@@ -33,7 +33,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.party.PartyMedia
+import com.nuvio.tv.livetv.ui.OnDemandScreen
 import com.nuvio.tv.domain.model.ExperienceMode
+import com.nuvio.tv.livetv.ui.GuideScreen
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
 import com.nuvio.tv.ui.screens.ExperienceModeSelectionScreen
@@ -52,6 +54,7 @@ import com.nuvio.tv.ui.screens.party.PartyScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
 import com.nuvio.tv.ui.screens.search.DiscoverScreen
 import com.nuvio.tv.ui.screens.search.SearchScreen
+import com.nuvio.tv.livetv.ui.SportsScreen
 import com.nuvio.tv.ui.screens.settings.AboutScreen
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.LicensesAttributionsScreen
@@ -1327,6 +1330,27 @@ private fun PlaybackNavHost(
             )
         }
 
+        rootComposable(Screen.LiveTvOnDemand.route) {
+            OnDemandScreen(
+                onPlay = { playback ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playback.streamUrl,
+                            title = playback.title,
+                            headers = playback.headers,
+                            contentType = playback.contentType,
+                            contentName = playback.title,
+                            poster = playback.posterUrl,
+                            season = playback.seasonNumber,
+                            episode = playback.episodeNumber,
+                            episodeTitle = playback.episodeTitle
+                        )
+                    )
+                },
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
         rootComposable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
@@ -1389,6 +1413,41 @@ private fun PlaybackNavHost(
         composable(Screen.PlaybackSettings.route) {
             PlaybackSettingsScreen(
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        rootComposable(Screen.LiveTvSports.route) {
+            SportsScreen(
+                onBackPress = { navController.popBackStack() },
+                onPlay = { url, headers, title ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = url,
+                            title = title,
+                            headers = headers,
+                            contentType = "channel",
+                            contentName = title,
+                        )
+                    )
+                },
+            )
+        }
+
+        rootComposable(Screen.LiveTvGuide.route) {
+            GuideScreen(
+                onPlayChannel = { channel, playable ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playable.url,
+                            title = channel.name,
+                            headers = playable.headers,
+                            contentId = channel.id,
+                            contentType = "channel",
+                            contentName = channel.name,
+                            logo = channel.logoUrl
+                        )
+                    )
+                }
             )
         }
 

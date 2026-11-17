@@ -3496,6 +3496,10 @@
 
     <string name="settings_live_tv">Live TV</string>
     <string name="settings_live_tv_subtitle">M3U playlists, Xtream, Stalker Portal and EPG sources.</string>
+    <string name="livetv_guide_title">Live TV Guide</string>
+    <string name="livetv_guide_all">All</string>
+    <string name="livetv_guide_empty">No channels to show. Add a Live TV source in Settings.</string>
+    <string name="livetv_guide_load_failed">Could not load the guide.</string>
     <string name="livetv_m3u_section">M3U playlists</string>
     <string name="livetv_xtream_section">Xtream</string>
     <string name="livetv_stalker_section">Stalker Portal</string>
@@ -3524,6 +3528,26 @@
     <string name="livetv_test_channels">%1$d channels</string>
     <string name="livetv_test_connected">Connected</string>
     <string name="livetv_test_failed">Failed: %1$s</string>
+    <string name="livetv_sports_title">Sports</string>
+    <string name="livetv_sports_live">LIVE</string>
+    <string name="livetv_sports_loading">Loading scores…</string>
+    <string name="livetv_sports_empty">No live or upcoming games</string>
+    <string name="livetv_sports_no_channels">No matching channel</string>
+    <string name="livetv_on_demand_title">On Demand</string>
+    <string name="livetv_on_demand_movies">Movies</string>
+    <string name="livetv_on_demand_series">Series</string>
+    <string name="livetv_on_demand_favorites">Favourites</string>
+    <string name="livetv_on_demand_all">All</string>
+    <string name="livetv_on_demand_search">Search On Demand</string>
+    <string name="livetv_on_demand_clear_search">Clear search</string>
+    <string name="livetv_on_demand_empty">No titles match.</string>
+    <string name="livetv_on_demand_no_source">Add an Xtream or Stalker source in Live TV settings.</string>
+    <string name="livetv_on_demand_retry">Retry</string>
+    <string name="livetv_on_demand_no_episodes">No episodes found.</string>
+    <string name="livetv_on_demand_episode">Episode %1$d</string>
+    <string name="livetv_on_demand_season">Season %1$d</string>
+    <string name="livetv_on_demand_favorite_hint">Hold OK on a title to add or remove a favourite</string>
+    <string name="livetv_on_demand_play_failed">Could not start this title.</string>
     <string name="livetv_search">Search channels</string>
     <string name="livetv_category_all">All</string>
     <string name="livetv_category_favourites">Favourites</string>
