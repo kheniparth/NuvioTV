@@ -53,6 +53,7 @@ data class ChannelsUiState(
 @HiltViewModel
 class ChannelsViewModel @Inject constructor(
     private val repository: LiveTvRepository,
+    private val playback: LiveTvPlaybackSession,
 ) : ViewModel() {
     private val catalog = MutableStateFlow(LiveTvCatalog())
     private val favoriteIds = MutableStateFlow<Set<String>>(emptySet())
@@ -128,6 +129,12 @@ class ChannelsViewModel @Inject constructor(
                 val resolved = repository.resolvePlayableUrl(channel)
                 if (resolved.url.isBlank()) error("No stream URL")
                 repository.recordRecent(channel.id)
+                playback.arm(
+                    channels = catalog.value.channels,
+                    favoriteIds = favoriteIds.value,
+                    category = selectedCategory.value,
+                    currentId = channel.id,
+                )
                 play.emit(
                     LiveTvPlayRequest(
                         streamUrl = resolved.url,
@@ -164,12 +171,9 @@ internal fun buildChannelRows(
 ): List<ChannelRow> {
     val needle = query.trim()
     return channels.mapNotNull { channel ->
-        val inCategory = when (category) {
-            ChannelCategory.All -> true
-            ChannelCategory.Favourites -> channel.id in favoriteIds
-            is ChannelCategory.Group -> channel.group?.trim() == category.name
-        }
-        if (!inCategory || (needle.isNotEmpty() && !channel.name.contains(needle, ignoreCase = true))) {
+        if (!channel.matchesCategory(category, favoriteIds) ||
+            (needle.isNotEmpty() && !channel.name.contains(needle, ignoreCase = true))
+        ) {
             return@mapNotNull null
         }
         val epg = guide.nowNext(channel.epgId.orEmpty(), nowMillis)
@@ -180,4 +184,33 @@ internal fun buildChannelRows(
             favorite = channel.id in favoriteIds,
         )
     }
+}
+
+internal fun LiveTvChannel.matchesCategory(category: ChannelCategory, favoriteIds: Set<String>): Boolean =
+    when (category) {
+        ChannelCategory.All -> true
+        ChannelCategory.Favourites -> id in favoriteIds
+        is ChannelCategory.Group -> group?.trim() == category.name
+    }
+
+internal fun channelsInCategory(
+    channels: List<LiveTvChannel>,
+    favoriteIds: Set<String>,
+    category: ChannelCategory,
+): List<LiveTvChannel> = channels.filter { it.matchesCategory(category, favoriteIds) }
+
+/** Next wraps to the first channel in [category]; previous wraps to the last. */
+internal fun adjacentChannel(
+    channels: List<LiveTvChannel>,
+    favoriteIds: Set<String>,
+    category: ChannelCategory,
+    currentId: String,
+    next: Boolean,
+): LiveTvChannel? {
+    val list = channelsInCategory(channels, favoriteIds, category)
+    if (list.isEmpty()) return null
+    val index = list.indexOfFirst { it.id == currentId }
+    val start = if (index < 0) if (next) -1 else 0 else index
+    val nextIndex = if (next) (start + 1) % list.size else (start - 1 + list.size) % list.size
+    return list[nextIndex]
 }
