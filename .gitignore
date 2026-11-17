@@ -46,6 +46,8 @@ scripts/*
 !scripts/generate_release_notes.py
 !scripts/release_notes/
 !scripts/release_notes/*.py
+!scripts/livetv-bootstrap.sh
+!scripts/livetv-bootstrap.py
 !scripts/release-metadata.sh
 !scripts/release_beta.py
 !scripts/tests/
