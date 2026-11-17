@@ -9,7 +9,7 @@ the earlier ones are merged. Every step must keep `./gradlew :app:assembleDebug`
 behaviour outside Live TV.
 
 ## Source material
-- Enhanced repo: `~/nuvio-enhanced`, branch `enhanced` (read with `git show enhanced:<path>`; the working
+- Enhanced repo: `~/nuvio/nuvio-enhanced`, branch `enhanced` (read with `git show enhanced:<path>`; the working
   checkout may be on another branch).
 - Live TV code: `composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/` (19 files, ~6,300 lines):
   - Data: `LiveTvModels.kt`, `LiveTvRepository.kt` (M3U + Xtream + Stalker loading, channel list, favourites,
@@ -22,7 +22,7 @@ behaviour outside Live TV.
   - Player side panel: `features/player/PlayerLiveChannelsPanel.kt` (channel list while watching).
 - Provider bootstrap script: `scripts/tv-livetv.sh` + `scripts/tv-livetv-prefs.py` (reads `/mnt/d/stalker/.env`).
   The Windows thread extended it with `--android|--windows` and a `--properties` writer
-  (`~/nuvio-enhanced`, branch `windows-desktop`, commit 7a790e185).
+  (`~/nuvio/nuvio-enhanced`, branch `windows-desktop`, commit 7a790e185).
 
 ## How NuvioTV is built (what the port has to fit)
 - Android-only app module `:app`, package `com.nuvio.tv`, ~990 Kotlin files. Hilt DI (`@HiltAndroidApp`,
