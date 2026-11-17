@@ -141,8 +141,10 @@ sealed class Screen(val route: String) {
     }
     data object LiveTvSports : Screen("live_tv_sports")
     data object Search : Screen("search")
+    data object LiveTvOnDemand : Screen("livetv_on_demand")
     data object Discover : Screen("discover")
     data object Library : Screen("library")
+    data object LiveTv : Screen("live_tv")
     data object Settings : Screen("settings")
     data object Tracking : Screen("trakt")
     data object WatchParty : Screen("watch_party?code={code}") {
@@ -222,4 +224,6 @@ sealed class Screen(val route: String) {
             return "tmdb_entity_browse/${encode(entityKind)}/$entityId/${encode(entityName)}?sourceType=${encode(sourceType)}"
         }
     }
+
+    data object LiveTvGuide : Screen("live_tv_guide")
 }

@@ -33,7 +33,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.party.PartyMedia
+import com.nuvio.tv.livetv.ui.OnDemandScreen
 import com.nuvio.tv.domain.model.ExperienceMode
+import com.nuvio.tv.livetv.ui.GuideScreen
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
 import com.nuvio.tv.ui.screens.ExperienceModeSelectionScreen
@@ -42,6 +44,7 @@ import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.home.HomeScreen
 import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
 import com.nuvio.tv.ui.screens.addon.CatalogOrderScreen
+import com.nuvio.tv.livetv.ui.ChannelsScreen
 import com.nuvio.tv.ui.screens.library.LibraryScreen
 import com.nuvio.tv.ui.screens.player.PlayerExitReason
 import com.nuvio.tv.ui.screens.player.PlayerScreen
@@ -1220,6 +1223,23 @@ private fun PlaybackNavHost(
             )
         }
 
+        rootComposable(Screen.LiveTv.route) {
+            ChannelsScreen(
+                onPlay = { request ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = request.streamUrl,
+                            title = request.title,
+                            headers = request.headers,
+                            contentType = "channel",
+                            logo = request.logoUrl,
+                            poster = request.logoUrl,
+                        )
+                    )
+                }
+            )
+        }
+
         rootComposable(Screen.Search.route) { backStackEntry ->
             val searchViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel(backStackEntry)
@@ -1295,6 +1315,27 @@ private fun PlaybackNavHost(
             )
         }
 
+        rootComposable(Screen.LiveTvOnDemand.route) {
+            OnDemandScreen(
+                onPlay = { playback ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playback.streamUrl,
+                            title = playback.title,
+                            headers = playback.headers,
+                            contentType = playback.contentType,
+                            contentName = playback.title,
+                            poster = playback.posterUrl,
+                            season = playback.seasonNumber,
+                            episode = playback.episodeNumber,
+                            episodeTitle = playback.episodeTitle
+                        )
+                    )
+                },
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
         rootComposable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
@@ -1360,7 +1401,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.LiveTvSports.route) {
+        rootComposable(Screen.LiveTvSports.route) {
             SportsScreen(
                 onBackPress = { navController.popBackStack() },
                 onPlay = { url, headers, title ->
@@ -1374,6 +1415,24 @@ private fun PlaybackNavHost(
                         )
                     )
                 },
+            )
+        }
+
+        rootComposable(Screen.LiveTvGuide.route) {
+            GuideScreen(
+                onPlayChannel = { channel, playable ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playable.url,
+                            title = channel.name,
+                            headers = playable.headers,
+                            contentId = channel.id,
+                            contentType = "channel",
+                            contentName = channel.name,
+                            logo = channel.logoUrl
+                        )
+                    )
+                }
             )
         }
 

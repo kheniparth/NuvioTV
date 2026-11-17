@@ -19,6 +19,12 @@ data class LiveTvNowNext(
 fun parseXmltvGzip(bytes: ByteArray): XmltvGuide =
     parseXmltv(ungzipXmltv(bytes).decodeToString())
 
+/** Gzip when the payload starts with the gzip magic bytes; otherwise UTF-8 XML. */
+fun parseEpgPayload(bytes: ByteArray): XmltvGuide {
+    val gzip = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+    return if (gzip) parseXmltvGzip(bytes) else parseXmltv(bytes.decodeToString())
+}
+
 fun parseXmltv(xml: String): XmltvGuide {
     val channelIds = linkedSetOf<String>()
     scanTags(xml, "channel") { openTag, _ ->

@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.data
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -47,6 +48,109 @@ class StalkerClient @Inject constructor(private val http: LiveTvHttp) {
             }
         }
         return channels.distinctBy { it.id }
+    }
+
+    suspend fun vodCatalog(settings: LiveTvStalkerSettings, kind: LiveTvVodKind): LiveTvVodCatalog {
+        val normalized = settings.normalized()
+        val type = kind.stalkerType()
+        val categoryPrefix = "stalker:$type:"
+        var auth = token(normalized)
+        val categories = request(normalized, auth, type, "get_categories").js().array("data").mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val id = item.string("id") ?: item.string("category_id") ?: return@mapNotNull null
+            LiveTvVodCategory(
+                id = "$categoryPrefix$id",
+                name = item.string("title") ?: item.string("name") ?: id,
+                remoteId = id,
+            )
+        }
+        auth = session?.token ?: auth
+        val items = mutableListOf<LiveTvVodItem>()
+        for (page in 1..20) {
+            val data = request(normalized, auth, type, "get_ordered_list", mapOf("p" to page.toString())).js().array("data")
+            auth = session?.token ?: auth
+            if (data.isEmpty()) break
+            data.forEach { element ->
+                val item = element as? JsonObject ?: return@forEach
+                val remoteId = item.string("id") ?: return@forEach
+                val name = item.string("name") ?: item.string("title") ?: return@forEach
+                items += LiveTvVodItem(
+                    id = "stalker-$type:$remoteId",
+                    remoteId = remoteId,
+                    kind = kind,
+                    provider = LiveTvVodProvider.Stalker,
+                    name = name,
+                    posterUrl = item.string("screenshot_uri") ?: item.string("cover") ?: item.string("logo"),
+                    categoryId = item.string("category_id")?.let { "$categoryPrefix$it" },
+                    rating = (item.string("rating_imdb") ?: item.string("rating"))
+                        ?.toDoubleOrNull()
+                        ?.takeIf { it > 0.0 },
+                    plot = item.string("description"),
+                    year = item.string("year")?.take(4)?.takeIf { year -> year.all(Char::isDigit) },
+                    command = item.string("cmd") ?: item.string("url"),
+                )
+            }
+        }
+        return LiveTvVodCatalog(categories, items.distinctBy { it.id })
+    }
+
+    suspend fun vodEpisodes(settings: LiveTvStalkerSettings, seriesId: String): List<LiveTvVodEpisode> {
+        val normalized = settings.normalized()
+        var auth = token(normalized)
+        val episodes = mutableListOf<LiveTvVodEpisode>()
+        for (page in 1..20) {
+            val data = request(
+                normalized,
+                auth,
+                "series",
+                "get_ordered_list",
+                mapOf("movie_id" to seriesId, "season_id" to "0", "episode_id" to "0", "p" to page.toString()),
+            ).js().array("data")
+            auth = session?.token ?: auth
+            if (data.isEmpty()) break
+            data.forEachIndexed { index, element ->
+                val item = element as? JsonObject ?: return@forEachIndexed
+                val id = item.string("id") ?: return@forEachIndexed
+                val number = (item.string("episode_number") ?: item.string("episode") ?: item.string("episode_num"))
+                    ?.toIntOrNull() ?: (index + 1)
+                val season = (item.string("season") ?: item.string("season_number") ?: item.string("series_number"))
+                    ?.toIntOrNull() ?: 1
+                episodes += LiveTvVodEpisode(
+                    id = id,
+                    season = season,
+                    episodeNumber = number,
+                    title = item.string("name")?.takeIf(String::isNotBlank) ?: "Episode $number",
+                    plot = item.string("description"),
+                    imageUrl = item.string("screenshot_uri"),
+                    durationText = item.string("time"),
+                    command = item.string("cmd") ?: item.string("url"),
+                )
+            }
+        }
+        return episodes.distinctBy { it.id }.sortedWith(compareBy({ it.season }, { it.episodeNumber }))
+    }
+
+    suspend fun createVodLink(
+        settings: LiveTvStalkerSettings,
+        kind: LiveTvVodKind,
+        command: String,
+    ): LiveTvPlayable {
+        val normalized = settings.normalized()
+        val direct = command.playableUrl()
+        return try {
+            val result = request(normalized, token(normalized), kind.stalkerType(), "create_link", mapOf("cmd" to command)).js()
+            val url = (result.string("cmd") ?: result.string("url") ?: result.string("stream_url"))?.playableUrl()
+            require(!url.isNullOrBlank()) { "The portal returned no stream URL." }
+            LiveTvPlayable(url, headers(normalized, session?.token.orEmpty()))
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            // shortcut: some portals put a ready URL in cmd; play it when create_link fails.
+            require(direct.startsWith("http://") || direct.startsWith("https://")) {
+                "The portal could not resolve this item."
+            }
+            LiveTvPlayable(direct, headers(normalized, session?.token.orEmpty()))
+        }
     }
 
     suspend fun createLink(channel: LiveTvChannel, settings: LiveTvStalkerSettings): LiveTvChannel {
@@ -140,6 +244,8 @@ class StalkerClient @Inject constructor(private val http: LiveTvHttp) {
     }
 
     private fun String.playableUrl() = trim().removePrefix("ffmpeg ").removePrefix("auto ").substringBefore(' ').trim()
+
+    private fun LiveTvVodKind.stalkerType() = if (this == LiveTvVodKind.Movies) "vod" else "series"
 
     private fun JsonObject.js() = (this["js"] as? JsonObject) ?: this
 

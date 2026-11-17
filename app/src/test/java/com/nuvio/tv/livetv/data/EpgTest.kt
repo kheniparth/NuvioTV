@@ -45,7 +45,7 @@ class EpgTest {
             GZIPOutputStream(buffer).use { gzip -> gzip.write(FIXTURE.toByteArray()) }
             buffer.toByteArray()
         }
-        val guide = parseXmltvGzip(gzipped)
+        val guide = parseEpgPayload(gzipped)
         assertEquals(listOf("News & Weather", "Later"), guide.programsInWindow(
             "bbc1.uk",
             1_794_916_800_000L,
