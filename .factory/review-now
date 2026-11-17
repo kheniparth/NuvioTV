@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# WSL wrapper: start the Claude review run now (skips the "is it due" check and Cursor dispatch; the one-at-a-time lock still applies).
+# Output goes to the same history as the scheduled ticks: ~/.nuvio/nuvio-tv-history.log.
+PS=$(command -v powershell.exe || echo /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe)  # not on PATH when WSL interop PATH is off
+exec "$PS" -NoProfile -ExecutionPolicy Bypass -Command "& { Get-Date -Format s; & '$(wslpath -w "$(dirname "$(readlink -f "$0")")/tick.ps1")' -ReviewNow } *>> (Join-Path \$env:USERPROFILE '.nuvio\nuvio-tv-history.log')"

@@ -1,0 +1,121 @@
+{
+  "_comment": "Who does which job. Each role lists workers in order; dispatch.ps1 takes the first one that is not frozen. `model` is a key of that worker's `models`. Cursor model names are never listed: `effort` (low|medium|high) plus the worker's `family` (a name fragment, the one thing to edit when the plan changes) pick the newest matching model from `agent models` at dispatch; if none matches, Cursor `auto`. Policy: implement = medium, implement-strong, architect and review = high. A reviewer is never the worker that wrote the PR (the Claude review run is a different worker from Cursor/DeepSeek authors; a DeepSeek or Cursor review of the other's PR is future work). Intent labels: GitHub issues carry an intent (`architect`, `implement`, `review`), never a worker; the router maps intent -> role -> worker. The old `cursor`/`deepseek` labels are gone; the router alone picks the worker (freezes, schedule, availability). Workers with `dispatchable: false` are skipped by dispatch.ps1 (Claude architect work is not started by it yet, so architect issues go to the next worker). `schedule.freeze` freezes a worker automatically (times in `schedule.timezone`); it is separate from the manual FREEZE files. DeepSeek peak pricing (2x) is 01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except Chinese public holidays (list those dates in `offPeakDates`): https://api-docs.deepseek.com/quick_start/pricing",
+  "workers": {
+    "claude": {
+      "kind": "claude-cli",
+      "freezeFile": "FREEZE-claude",
+      "models": {
+        "architect": "claude-opus-5-5",
+        "architect-cheap": "claude-sonnet-5-5"
+      },
+      "dispatchable": false
+    },
+    "cursor": {
+      "kind": "cursor-agent",
+      "freezeFile": "FREEZE",
+      "family": "grok",
+      "models": {}
+    },
+    "deepseek": {
+      "kind": "claude-cli-deepseek",
+      "freezeFile": "FREEZE-deepseek",
+      "models": {
+        "flash": "deepseek-flash"
+      },
+      "schedule": {
+        "reason": "peak pricing",
+        "timezone": "UTC",
+        "freeze": [
+          {
+            "days": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri"
+            ],
+            "hours": [
+              "01:00-04:00",
+              "06:00-10:00"
+            ]
+          }
+        ],
+        "offPeakDates": [],
+        "displayTimezone": "America/Toronto"
+      }
+    }
+  },
+  "roles": {
+    "architect": [
+      {
+        "worker": "claude",
+        "model": "architect",
+        "effort": "high"
+      },
+      {
+        "worker": "cursor",
+        "effort": "high"
+      }
+    ],
+    "implement": [
+      {
+        "worker": "cursor",
+        "effort": "medium"
+      },
+      {
+        "worker": "deepseek",
+        "model": "flash"
+      }
+    ],
+    "implement-strong": [
+      {
+        "worker": "cursor",
+        "effort": "high"
+      },
+      {
+        "worker": "deepseek",
+        "model": "flash"
+      }
+    ],
+    "review": [
+      {
+        "worker": "cursor",
+        "effort": "high"
+      },
+      {
+        "worker": "deepseek",
+        "model": "flash"
+      },
+      {
+        "worker": "claude",
+        "model": "architect-cheap"
+      }
+    ]
+  },
+  "filters": {
+    "stage1_relevant": "task label (architect|implement), or PR with a new head, or owner comment; not closed, pinned or `later`",
+    "stage2_claimable": "no marker for this issue/head, worker not frozen, no worker already running, budget not spent"
+  },
+  "intents": {
+    "architect": {
+      "labels": [
+        "architect"
+      ],
+      "role": "architect"
+    },
+    "implement": {
+      "labels": [
+        "implement"
+      ],
+      "role": "implement",
+      "strongRole": "implement-strong"
+    },
+    "review": {
+      "labels": [
+        "review"
+      ],
+      "role": "review",
+      "dispatch": false
+    }
+  }
+}

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# WSL wrapper: runs .factory/router.ps1 on Windows (one factory router run; -DryRun shows what it would do).
+PS=$(command -v powershell.exe || echo /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe)  # not on PATH when WSL interop PATH is off
+exec "$PS" -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$(dirname "$(readlink -f "$0")")/router.ps1")" "$@"
