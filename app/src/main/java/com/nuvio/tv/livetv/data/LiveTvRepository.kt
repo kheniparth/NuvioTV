@@ -1,17 +1,28 @@
 package com.nuvio.tv.livetv.data
 
 import android.util.Log
+import com.nuvio.tv.livetv.data.local.LiveTvSettingsDataStore
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 data class LiveTvPlayable(val url: String, val headers: Map<String, String>)
+
+/** Channels, guide and favourites for the Channels screen. */
+data class LiveTvCatalog(
+    val channels: List<LiveTvChannel> = emptyList(),
+    val guide: XmltvGuide = XmltvGuide(),
+    val favoriteIds: Set<String> = emptySet(),
+)
 
 @Singleton
 class LiveTvRepository @Inject constructor(
@@ -20,7 +31,10 @@ class LiveTvRepository @Inject constructor(
     private val xtream: XtreamClient,
     private val stalker: StalkerClient,
     private val cache: LiveTvCache,
+    private val settingsStore: LiveTvSettingsDataStore,
 ) {
+    val hasConfiguredSource: Flow<Boolean> = settingsStore.settings.map { it.hasConfiguredSource() }
+
     /** shortcut: no refresh flag, the list updates when the source signature changes. */
     suspend fun channels(): List<LiveTvChannel> {
         val current = sources.current()
@@ -57,6 +71,12 @@ class LiveTvRepository @Inject constructor(
         return loaded
     }
 
+    suspend fun loadCatalog(nowMillis: Long): LiveTvCatalog = LiveTvCatalog(
+        channels = channels(),
+        guide = XmltvGuide(programsByTvgId = guide(nowMillis)),
+        favoriteIds = settingsStore.settings.first().favoriteChannelIds.toSet(),
+    )
+
     fun categories(channels: List<LiveTvChannel>): List<String> =
         channels.mapNotNull { it.group?.trim()?.takeIf(String::isNotEmpty) }.distinct().sorted()
 
@@ -72,6 +92,17 @@ class LiveTvRepository @Inject constructor(
         return LiveTvPlayable(resolved.streamUrl, resolved.headers)
     }
 
+    suspend fun toggleFavorite(channelId: String) {
+        val current = settingsStore.settings.first().favoriteChannelIds.toMutableSet()
+        if (!current.add(channelId)) current.remove(channelId)
+        settingsStore.setFavoriteChannelIds(current)
+    }
+
+    suspend fun recordRecent(channelId: String) {
+        val current = settingsStore.settings.first().recentChannelIds
+        settingsStore.setRecentChannelIds(listOf(channelId) + current)
+    }
+
     private suspend fun guide(nowMillis: Long): Map<String, List<LiveTvEpgProgram>> {
         val urls = sources.current().epgSources.map { it.url }.distinct()
         if (urls.isEmpty()) return emptyMap()
@@ -82,12 +113,7 @@ class LiveTvRepository @Inject constructor(
             urls.map { url ->
                 async {
                     runCatching {
-                        val bytes = http.getBytes(url, EPG_HEADERS)
-                        if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-                            parseXmltvGzip(bytes)
-                        } else {
-                            parseXmltv(bytes.toString(Charsets.UTF_8))
-                        }
+                        parseEpgPayload(http.getBytes(url, EPG_HEADERS))
                     }
                 }
             }.awaitAll().forEach { result ->

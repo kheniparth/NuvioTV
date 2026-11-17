@@ -43,6 +43,7 @@ import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.home.HomeScreen
 import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
 import com.nuvio.tv.ui.screens.addon.CatalogOrderScreen
+import com.nuvio.tv.livetv.ui.ChannelsScreen
 import com.nuvio.tv.ui.screens.library.LibraryScreen
 import com.nuvio.tv.ui.screens.player.PlayerExitReason
 import com.nuvio.tv.ui.screens.player.PlayerScreen
@@ -1216,6 +1217,23 @@ private fun PlaybackNavHost(
                             }
                         }
                     }
+                }
+            )
+        }
+
+        rootComposable(Screen.LiveTv.route) {
+            ChannelsScreen(
+                onPlay = { request ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = request.streamUrl,
+                            title = request.title,
+                            headers = request.headers,
+                            contentType = "channel",
+                            logo = request.logoUrl,
+                            poster = request.logoUrl,
+                        )
+                    )
                 }
             )
         }
