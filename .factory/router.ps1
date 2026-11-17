@@ -19,11 +19,13 @@ $dispatch = if ($ReviewNow) { 'dispatch: skipped (-ReviewNow)' } elseif ($DryRun
 # dispatch: lines are summarised in the tick line below; anything else (a dry run's task text) passes through.
 $dispatch | Where-Object { $_ -notlike 'dispatch:*' } | ForEach-Object { Write-Output $_ }
 $d = ($dispatch | Where-Object { $_ -like 'dispatch:*' } | Select-Object -Last 1) -replace '^dispatch: ', ''
-# Second lane: DeepSeek works in parallel with Cursor on the next ready issue (build.sh serialises the Gradle builds).
+# Extra lanes work in parallel with the main one, each on the next ready issue (build.sh serialises the Gradle builds). Owner: 2-3 Cursor + 2-3 DeepSeek.
 if (-not $ReviewNow) {
-    $lane = & "$PSScriptRoot\dispatch.ps1" -Lane deepseek -DryRun:$DryRun
-    $lane | Where-Object { $_ -notlike 'dispatch*' } | ForEach-Object { Write-Output $_ }
-    $d += ' | deepseek lane: ' + (($lane | Where-Object { $_ -like 'dispatch*' } | Select-Object -Last 1) -replace '^dispatch\[deepseek\]: ', '')
+    foreach ($l in 'deepseek', 'cursor2', 'deepseek2', 'cursor3', 'deepseek3') {
+        $lane = & "$PSScriptRoot\dispatch.ps1" -Lane $l -DryRun:$DryRun
+        $lane | Where-Object { $_ -notlike 'dispatch*' } | ForEach-Object { Write-Output $_ }
+        $d += " | ${l}: " + (($lane | Where-Object { $_ -like 'dispatch*' } | Select-Object -Last 1) -replace '^dispatch\[\w+\]: ', '')
+    }
 }
 
 function Review {
