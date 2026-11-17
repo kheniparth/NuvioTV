@@ -17,6 +17,8 @@ out="$HOME/nuvio/factory/build"
 dst="$out/$name"
 log="$out/$name.log"
 mkdir -p "$dst"
+# Parallel workers take turns here: one Gradle build needs ~13 GB and WSL has ~23 GB.
+exec 9>"$out/.build.lock"; echo "build.sh: waiting for the build lock" >&2; flock 9
 # Exclude only module-level build dirs: app/src/**/core/build is a source package.
 rsync -a --delete --exclude .git --exclude /build --exclude '/*/build' --exclude .gradle --exclude .claude --exclude local.properties "$src/" "$dst/"
 props="$HOME/nuvio/factory/NuvioTV.local.properties"
