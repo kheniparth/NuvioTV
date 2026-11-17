@@ -37,14 +37,29 @@ class LiveTvHttp @Inject constructor(client: OkHttpClient) {
         return response.body
     }
 
+    /** Raw bytes so a gzip XMLTV file is not decoded as text. */
+    suspend fun getBytes(url: String, headers: Map<String, String> = emptyMap()): ByteArray =
+        withContext(Dispatchers.IO) {
+            http.newCall(buildRequest("GET", url, headers, "")).execute().use { response ->
+                if (response.code !in 200..299) error("HTTP ${response.code}")
+                response.body?.bytes() ?: ByteArray(0)
+            }
+        }
+
     suspend fun requestRaw(
         method: String,
         url: String,
         headers: Map<String, String> = emptyMap(),
         body: String = "",
     ): LiveTvRawResponse = withContext(Dispatchers.IO) {
+        http.newCall(buildRequest(method, url, headers, body)).execute().use { response ->
+            LiveTvRawResponse(response.code, response.body?.string().orEmpty())
+        }
+    }
+
+    private fun buildRequest(method: String, url: String, headers: Map<String, String>, body: String): Request {
         val noBody = method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)
-        val request = Request.Builder()
+        return Request.Builder()
             .url(url)
             .method(method, if (noBody) null else body.toRequestBody("text/plain; charset=utf-8".toMediaType()))
             .apply {
@@ -54,9 +69,6 @@ class LiveTvHttp @Inject constructor(client: OkHttpClient) {
                 }
             }
             .build()
-        http.newCall(request).execute().use { response ->
-            LiveTvRawResponse(response.code, response.body?.string().orEmpty())
-        }
     }
 
     private companion object {
