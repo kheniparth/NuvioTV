@@ -5,8 +5,9 @@
 # Work, in order: an open PR whose latest Claude review asked for changes on its current head,
 # then the next open issue with an intent label (bugs first, lowest number) that has no PR yet.
 # One agent at a time (lock file); each piece is dispatched at most once per head/issue.
-# Usage: dispatch.ps1 [-DryRun] [-Issue <n>] [-FixPr <n>]
-param([switch]$DryRun, [int]$Issue = 0, [int]$FixPr = 0)
+# -Lane deepseek: a second, parallel lane with its own lock (running-deepseek.json) that only starts DeepSeek; the issue/fix markers stop two lanes taking the same work.
+# Usage: dispatch.ps1 [-DryRun] [-Issue <n>] [-FixPr <n>] [-Lane deepseek]
+param([switch]$DryRun, [int]$Issue = 0, [int]$FixPr = 0, [string]$Lane = '')
 $ErrorActionPreference = 'Stop'
 $env:GIT_CONFIG_COUNT = '1'; $env:GIT_CONFIG_KEY_0 = 'safe.directory'; $env:GIT_CONFIG_VALUE_0 = '*'
 . "$PSScriptRoot/project.ps1"
@@ -14,9 +15,9 @@ $env:GIT_CONFIG_COUNT = '1'; $env:GIT_CONFIG_KEY_0 = 'safe.directory'; $env:GIT_
 $agent = "$env:LOCALAPPDATA\cursor-agent\agent.cmd"
 # Lock and markers live outside the repo so they survive pulls and stop double starts.
 New-Item -ItemType Directory -Force $state | Out-Null
-$lock = Join-Path $state 'running.json'
+$lock = Join-Path $state $(if ($Lane) { "running-$Lane.json" } else { 'running.json' })
 
-function Say($text) { Write-Output "dispatch: $text" }
+function Say($text) { Write-Output "dispatch$(if ($Lane) { "[$Lane]" }): $text" }
 
 # Worker choice comes from workers.json (workers.ps1). Owner freeze: FREEZE stops new Cursor starts, FREEZE-deepseek stops new DeepSeek starts (delete a file to resume);
 # a running agent is not killed. Work Cursor would take goes to DeepSeek while only FREEZE exists.
@@ -26,6 +27,7 @@ $dsFrozen = Test-Path (Join-Path $state 'FREEZE-deepseek')
 $cfg = Get-Content (Join-Path $PSScriptRoot 'workers.json') -Raw | ConvertFrom-Json
 $dsSchedule = Get-ScheduleFreeze $cfg.workers.deepseek
 if ($dsSchedule) { $dsFrozen = $true }
+if ($Lane -and $dsFrozen) { Say "frozen: DeepSeek lane ($(if ($dsSchedule) { $dsSchedule } else { 'FREEZE-deepseek' }))"; exit 0 }
 if ($cursorFrozen -and $dsFrozen) { Say "frozen: Cursor (FREEZE) and DeepSeek ($(if ($dsSchedule) { $dsSchedule } else { 'FREEZE-deepseek' })), not dispatching"; exit 0 }
 
 if (Test-Path $lock) {
@@ -55,8 +57,8 @@ foreach ($pr in ($prs | Sort-Object number)) {
     if ($review -and $review.body -match 'Changes requested') {
         # The worker that wrote the PR fixes it; if it is frozen, the next worker for the implement role (workers.json) takes over.
         $author = if ($pr.headRefName -like 'deepseek/*') { 'deepseek' } else { 'cursor' }
-        $pick = Select-Worker 'implement' $author
-        if (-not $pick) { $pick = Select-Worker 'implement' }
+        $pick = Select-Worker 'implement' $(if ($Lane) { $Lane } else { $author })
+        if (-not $pick -and -not $Lane) { $pick = Select-Worker 'implement' }
         if (-not $pick) { continue }
         $job = @{ kind = 'fix'; number = $pr.number; branch = $pr.headRefName; marker = $marker; worker = $pick.worker; pick = $pick }
         break
@@ -84,7 +86,7 @@ if (-not $job -and -not $FixPr) {
         # `implement-strong`).
         $nn = @($next.labels | ForEach-Object { $_.name })
         $intent = if ($nn -contains 'architect') { 'architect' } else { 'implement' }
-        $pick = Select-Worker $(if ($intent -eq 'architect') { 'architect' } elseif ($strong) { 'implement-strong' } else { 'implement' })
+        $pick = Select-Worker $(if ($intent -eq 'architect') { 'architect' } elseif ($strong) { 'implement-strong' } else { 'implement' }) $Lane
         if ($pick) { $job = @{ kind = 'issue'; intent = $intent; number = $next.number; title = $next.title; strong = $strong; marker = (Join-Path $state "issue-$($next.number).txt"); worker = $pick.worker; pick = $pick } }
     }
 }
