@@ -46,6 +46,7 @@ data class LiveTvSettings(
     val stalker: LiveTvStalkerSettings = LiveTvStalkerSettings(),
     val epgSources: List<LiveTvEpgSource> = emptyList(),
     val favoriteChannelIds: List<String> = emptyList(),
+    val favoriteVodIds: List<String> = emptyList(),
     val recentChannelIds: List<String> = emptyList(),
 )
 
@@ -56,6 +57,7 @@ internal const val LIVE_TV_XTREAM_KEY = "xtream_settings"
 internal const val LIVE_TV_STALKER_KEY = "stalker_settings"
 internal const val LIVE_TV_EPG_SOURCES_KEY = "epg_sources_blob"
 internal const val LIVE_TV_FAVORITES_KEY = "favorite_channel_ids_blob"
+internal const val LIVE_TV_VOD_FAVORITES_KEY = "favorite_vod_ids_blob"
 internal const val LIVE_TV_RECENTS_KEY = "recent_channel_ids"
 
 internal fun encodeLiveTvPlaylists(playlists: List<LiveTvPlaylist>): String =

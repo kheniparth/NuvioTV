@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.party.PartyMedia
+import com.nuvio.tv.livetv.ui.OnDemandScreen
 import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
@@ -1291,6 +1292,27 @@ private fun PlaybackNavHost(
                         )
                     )
                 }
+            )
+        }
+
+        composable(Screen.LiveTvOnDemand.route) {
+            OnDemandScreen(
+                onPlay = { playback ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playback.streamUrl,
+                            title = playback.title,
+                            headers = playback.headers,
+                            contentType = playback.contentType,
+                            contentName = playback.title,
+                            poster = playback.posterUrl,
+                            season = playback.seasonNumber,
+                            episode = playback.episodeNumber,
+                            episodeTitle = playback.episodeTitle
+                        )
+                    )
+                },
+                onBackPress = { navController.popBackStack() }
             )
         }
 

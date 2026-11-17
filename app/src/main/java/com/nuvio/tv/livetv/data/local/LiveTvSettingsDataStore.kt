@@ -24,6 +24,7 @@ import javax.inject.Singleton
  * - `stalker_settings`: `{"portalUrl","macAddress","username","password","isEnabled"}`
  * - `epg_sources_blob`: `[{"id","name","url","isEnabled"}]`
  * - `favorite_channel_ids_blob`: `["channel-id", ...]` sorted
+ * - `favorite_vod_ids_blob`: `["vod-item-id", ...]` sorted
  * - `recent_channel_ids`: `["newest-id", ...]` newest first, at most 50
  */
 @Singleton
@@ -44,6 +45,9 @@ class LiveTvSettingsDataStore @Inject constructor(
                 epgSources = decodeLiveTvEpgSources(prefs[epgSourcesKey]),
                 favoriteChannelIds = normalizeLiveTvFavoriteChannelIds(
                     decodeLiveTvStringList(prefs[favoritesKey])
+                ),
+                favoriteVodIds = normalizeLiveTvFavoriteChannelIds(
+                    decodeLiveTvStringList(prefs[vodFavoritesKey])
                 ),
                 recentChannelIds = capLiveTvRecentChannelIds(
                     decodeLiveTvStringList(prefs[recentsKey])
@@ -74,6 +78,12 @@ class LiveTvSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setFavoriteVodIds(ids: Collection<String>) {
+        store().edit {
+            it[vodFavoritesKey] = encodeLiveTvStringList(normalizeLiveTvFavoriteChannelIds(ids))
+        }
+    }
+
     suspend fun setRecentChannelIds(ids: List<String>) {
         store().edit { it[recentsKey] = encodeLiveTvStringList(capLiveTvRecentChannelIds(ids)) }
     }
@@ -85,6 +95,7 @@ class LiveTvSettingsDataStore @Inject constructor(
         val stalkerKey = stringPreferencesKey(LIVE_TV_STALKER_KEY)
         val epgSourcesKey = stringPreferencesKey(LIVE_TV_EPG_SOURCES_KEY)
         val favoritesKey = stringPreferencesKey(LIVE_TV_FAVORITES_KEY)
+        val vodFavoritesKey = stringPreferencesKey(LIVE_TV_VOD_FAVORITES_KEY)
         val recentsKey = stringPreferencesKey(LIVE_TV_RECENTS_KEY)
     }
 }
