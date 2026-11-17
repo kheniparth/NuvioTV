@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -1106,7 +1107,7 @@ open class MainActivity : ComponentActivity() {
                     }
 
                     val liveTvAvailable by liveTvRepository.hasConfiguredSource.collectAsState(initial = false)
-                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route, Screen.LiveTvGuide.route)
+                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route, Screen.LiveTvGuide.route, Screen.LiveTvSports.route)
                     LaunchedEffect(liveTvAvailable, currentRoute) {
                         if (!liveTvAvailable && liveTvRoutes.any { it == currentRoute }) {
                             navController.navigate(Screen.Home.route) {
@@ -1128,6 +1129,7 @@ open class MainActivity : ComponentActivity() {
                             if (liveTvAvailable) {
                                 add(Screen.LiveTv.route)
                                 add(Screen.LiveTvGuide.route)
+                                add(Screen.LiveTvSports.route)
                                 add(Screen.LiveTvOnDemand.route)
                             }
                         }
@@ -1140,6 +1142,7 @@ open class MainActivity : ComponentActivity() {
                     val strNavLiveTv = stringResource(R.string.nav_live_tv)
                     val strNavOnDemand = stringResource(R.string.livetv_on_demand_title)
                     val strNavGuide = stringResource(R.string.livetv_guide_title)
+                    val strNavSports = stringResource(R.string.livetv_sports_title)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
@@ -1149,6 +1152,7 @@ open class MainActivity : ComponentActivity() {
                         strNavLiveTv,
                         strNavOnDemand,
                         strNavGuide,
+                        strNavSports,
                         strNavSettings,
                         discoverLocation,
                         liveTvAvailable
@@ -1204,6 +1208,13 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.LiveTvGuide.route,
                                         label = strNavGuide,
                                         icon = Icons.Default.DateRange
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvSports.route,
+                                        label = strNavSports,
+                                        icon = Icons.Default.SportsSoccer
                                     )
                                 )
                             }

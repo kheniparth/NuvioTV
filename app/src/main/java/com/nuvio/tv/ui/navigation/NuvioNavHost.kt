@@ -54,6 +54,7 @@ import com.nuvio.tv.ui.screens.party.PartyScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
 import com.nuvio.tv.ui.screens.search.DiscoverScreen
 import com.nuvio.tv.ui.screens.search.SearchScreen
+import com.nuvio.tv.livetv.ui.SportsScreen
 import com.nuvio.tv.ui.screens.settings.AboutScreen
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.LicensesAttributionsScreen
@@ -1397,6 +1398,23 @@ private fun PlaybackNavHost(
         composable(Screen.PlaybackSettings.route) {
             PlaybackSettingsScreen(
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        rootComposable(Screen.LiveTvSports.route) {
+            SportsScreen(
+                onBackPress = { navController.popBackStack() },
+                onPlay = { url, headers, title ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = url,
+                            title = title,
+                            headers = headers,
+                            contentType = "channel",
+                            contentName = title,
+                        )
+                    )
+                },
             )
         }
 

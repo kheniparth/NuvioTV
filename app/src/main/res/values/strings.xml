@@ -3528,6 +3528,11 @@
     <string name="livetv_test_channels">%1$d channels</string>
     <string name="livetv_test_connected">Connected</string>
     <string name="livetv_test_failed">Failed: %1$s</string>
+    <string name="livetv_sports_title">Sports</string>
+    <string name="livetv_sports_live">LIVE</string>
+    <string name="livetv_sports_loading">Loading scores…</string>
+    <string name="livetv_sports_empty">No live or upcoming games</string>
+    <string name="livetv_sports_no_channels">No matching channel</string>
     <string name="livetv_on_demand_title">On Demand</string>
     <string name="livetv_on_demand_movies">Movies</string>
     <string name="livetv_on_demand_series">Series</string>
