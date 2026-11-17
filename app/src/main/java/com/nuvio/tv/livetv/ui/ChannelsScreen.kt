@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -72,55 +73,75 @@ fun ChannelsScreen(
         viewModel.playRequests.collect(onPlay)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(NuvioTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
-    ) {
-        Text(
-            text = stringResource(R.string.nav_live_tv),
-            style = MaterialTheme.typography.headlineSmall,
-            color = NuvioTheme.colors.TextPrimary,
-        )
-        ChannelSearchField(state.query, viewModel::setQuery)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-            items(state.categories, key = { it.key() }) { category ->
-                CategoryChip(
-                    label = category.label(),
-                    selected = category == state.selectedCategory,
-                    onClick = { viewModel.selectCategory(category) },
-                )
-            }
-        }
-        state.error?.let { message ->
-            Text(text = message, style = MaterialTheme.typography.bodyMedium, color = NuvioTheme.colors.Primary)
-        }
-        when {
-            state.loading -> Text(
-                text = stringResource(R.string.livetv_loading),
-                style = MaterialTheme.typography.bodyLarge,
-                color = NuvioTheme.colors.TextSecondary,
+    var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
+    val listState = rememberLazyListState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(NuvioTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
+        ) {
+            Text(
+                text = stringResource(R.string.nav_live_tv),
+                style = MaterialTheme.typography.headlineSmall,
+                color = NuvioTheme.colors.TextPrimary,
             )
-            state.rows.isEmpty() -> Text(
-                text = stringResource(R.string.livetv_empty),
-                style = MaterialTheme.typography.bodyLarge,
-                color = NuvioTheme.colors.TextSecondary,
-            )
-            else -> LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
-                contentPadding = PaddingValues(bottom = NuvioTheme.spacing.lg),
-            ) {
-                items(state.rows, key = { it.channel.id }) { row ->
-                    ChannelLine(
-                        row = row,
-                        onPlay = { viewModel.play(row.channel) },
-                        onToggleFavorite = { viewModel.toggleFavorite(row.channel.id) },
+            ChannelSearchField(state.query, viewModel::setQuery)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
+                items(state.categories, key = { it.key() }) { category ->
+                    CategoryChip(
+                        label = category.label(),
+                        selected = category == state.selectedCategory,
+                        onClick = { viewModel.selectCategory(category) },
                     )
                 }
             }
+            state.error?.let { message ->
+                Text(text = message, style = MaterialTheme.typography.bodyMedium, color = NuvioTheme.colors.Primary)
+            }
+            when {
+                state.loading -> Text(
+                    text = stringResource(R.string.livetv_loading),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NuvioTheme.colors.TextSecondary,
+                )
+                state.rows.isEmpty() -> Text(
+                    text = stringResource(R.string.livetv_empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NuvioTheme.colors.TextSecondary,
+                )
+                else -> LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm),
+                    contentPadding = PaddingValues(bottom = NuvioTheme.spacing.lg),
+                ) {
+                    items(state.rows, key = { it.channel.id }) { row ->
+                        ChannelLine(
+                            row = row,
+                            onPlay = { viewModel.play(row.channel) },
+                            onToggleFavorite = { viewModel.toggleFavorite(row.channel.id) },
+                            onFocusChanged = { focused ->
+                                previewChannel = when {
+                                    focused -> row.channel
+                                    previewChannel?.id == row.channel.id -> null
+                                    else -> previewChannel
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
+        LiveTvPreviewOverlay(
+            focusedChannel = previewChannel,
+            scrollInProgress = listState.isScrollInProgress,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(NuvioTheme.spacing.lg),
+        )
     }
 }
 
@@ -217,7 +238,12 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ChannelLine(row: ChannelRow, onPlay: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun ChannelLine(
+    row: ChannelRow,
+    onPlay: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+) {
     val shape = RoundedCornerShape(12.dp)
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -226,7 +252,9 @@ private fun ChannelLine(row: ChannelRow, onPlay: () -> Unit, onToggleFavorite: (
     ) {
         Surface(
             onClick = onPlay,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { onFocusChanged(it.isFocused) },
             shape = ClickableSurfaceDefaults.shape(shape),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = NuvioTheme.colors.BackgroundCard,

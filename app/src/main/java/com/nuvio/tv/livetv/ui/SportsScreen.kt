@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,13 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,53 +101,72 @@ fun SportsScreen(
     val scope = rememberCoroutineScope()
     var playing by remember { mutableStateOf(false) }
     var playError by remember { mutableStateOf<String?>(null) }
+    var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
+    val listState = rememberLazyListState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.livetv_sports_title),
-            style = NuvioTheme.textStyles.headline,
-            color = NuvioTheme.colors.TextPrimary,
-        )
-        val message = playError ?: state.error
-        if (message != null) {
-            Text(text = message, color = NuvioTheme.colors.Error)
-        }
-        when {
-            state.loading -> Text(text = stringResource(R.string.livetv_sports_loading), color = NuvioTheme.colors.TextSecondary)
-            state.rows.isEmpty() && state.error == null ->
-                Text(text = stringResource(R.string.livetv_sports_empty), color = NuvioTheme.colors.TextSecondary)
-            else -> LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                items(state.rows, key = { "${it.game.leagueId}:${it.game.id}" }) { row ->
-                    SportsGameBlock(
-                        row = row,
-                        nowMillis = state.nowMillis,
-                        onChannel = { channel ->
-                            if (playing) return@SportsGameBlock
-                            playing = true
-                            scope.launch {
-                                try {
-                                    val playable = viewModel.playable(channel)
-                                    onPlay(playable.url, playable.headers, channel.name)
-                                } catch (error: CancellationException) {
-                                    throw error
-                                } catch (error: Exception) {
-                                    playing = false
-                                    playError = error.message
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.livetv_sports_title),
+                style = NuvioTheme.textStyles.headline,
+                color = NuvioTheme.colors.TextPrimary,
+            )
+            val message = playError ?: state.error
+            if (message != null) {
+                Text(text = message, color = NuvioTheme.colors.Error)
+            }
+            when {
+                state.loading -> Text(text = stringResource(R.string.livetv_sports_loading), color = NuvioTheme.colors.TextSecondary)
+                state.rows.isEmpty() && state.error == null ->
+                    Text(text = stringResource(R.string.livetv_sports_empty), color = NuvioTheme.colors.TextSecondary)
+                else -> LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    items(state.rows, key = { "${it.game.leagueId}:${it.game.id}" }) { row ->
+                        SportsGameBlock(
+                            row = row,
+                            nowMillis = state.nowMillis,
+                            onChannel = { channel ->
+                                if (playing) return@SportsGameBlock
+                                playing = true
+                                scope.launch {
+                                    try {
+                                        val playable = viewModel.playable(channel)
+                                        onPlay(playable.url, playable.headers, channel.name)
+                                    } catch (error: CancellationException) {
+                                        throw error
+                                    } catch (error: Exception) {
+                                        playing = false
+                                        playError = error.message
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                            onChannelFocus = { channel, focused ->
+                                previewChannel = when {
+                                    focused -> channel
+                                    previewChannel?.id == channel.id -> null
+                                    else -> previewChannel
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
+        LiveTvPreviewOverlay(
+            focusedChannel = previewChannel,
+            scrollInProgress = listState.isScrollInProgress,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+        )
     }
 }
 
@@ -153,6 +176,7 @@ private fun SportsGameBlock(
     row: SportsRow,
     nowMillis: Long,
     onChannel: (LiveTvChannel) -> Unit,
+    onChannelFocus: (LiveTvChannel, Boolean) -> Unit,
 ) {
     val game = row.game
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -203,6 +227,7 @@ private fun SportsGameBlock(
                 row.channels.forEach { channel ->
                     Button(
                         onClick = { onChannel(channel) },
+                        modifier = Modifier.onFocusChanged { onChannelFocus(channel, it.isFocused) },
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundCard,
                             contentColor = NuvioTheme.colors.TextPrimary,
