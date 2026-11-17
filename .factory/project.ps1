@@ -1,7 +1,7 @@
 # The only file that differs per project. Every other script here dot-sources it; copy this folder to a new project and edit this file (see README.md).
 $repo = 'kheniparth/NuvioTV'                  # GitHub owner/name (our fork; never NuvioMedia/*)
-$root = 'D:\nuvio-factory\NuvioTV'            # factory checkout on this machine (Windows git + Cursor work here)
-$wslRoot = '/mnt/d/nuvio-factory/NuvioTV'     # the same checkout seen from WSL
+$root = '\\wsl.localhost\Ubuntu\home\techmuzz\nuvio\factory\nuvio-tv'            # factory checkout on this machine (Windows git + Cursor work here)
+$wslRoot = '/home/techmuzz/nuvio/factory/nuvio-tv'     # the same checkout seen from WSL
 $base = 'dev'                                 # base branch for worktrees and PRs
 $upstream = 'https://github.com/NuvioMedia/NuvioTV.git'   # merged into $base by the review run (review.md Step 0b)
 $taskName = 'nuvio-tv-tick'                   # Windows Scheduled Task registered by register-tick-task.ps1
@@ -14,9 +14,8 @@ $board = @{ number = 2; id = 'PVT_kwHOAGS5vc4BsBpn'; field = 'PVTSSF_lAHOAGS5vc4
 # Checks every worker and the reviewer run before committing. Gradle runs in WSL on a native-disk copy (build.sh), because builds over /mnt/d are 10x slower.
 $checks = @'
 Checks (all must pass before you commit). From PowerShell:
-  wsl -d Ubuntu -- bash /mnt/d/nuvio-factory/NuvioTV/.factory/build.sh "<this working folder>"
-or, if your shell is already WSL bash: bash /mnt/d/nuvio-factory/NuvioTV/.factory/build.sh "<this working folder>"
-(keep the forward slashes: wsl.exe drops backslashes).
+  wsl -d Ubuntu -- bash /home/techmuzz/nuvio/factory/nuvio-tv/.factory/build.sh "<this working folder>"
+or, if your shell is already WSL bash: bash /home/techmuzz/nuvio/factory/nuvio-tv/.factory/build.sh "<this working folder>"
 It copies the folder to a WSL build dir and runs :app:assembleFullDebug and :app:testFullDebugUnitTest. It prints a short
 summary and the path of the full log; read that log only when a check fails. Never commit build output.
 git and gh need the safe-directory exception: the GIT_CONFIG_* environment variables are already set; use `git -c safe.directory=*` if git complains.

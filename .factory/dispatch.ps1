@@ -115,7 +115,7 @@ $name = "$($job.worker)-$($job.kind)-$($job.number)"
 $wt = Join-Path $root ".claude\worktrees\$name"
 $task = Join-Path $state "$name.md"
 $log = Join-Path $state "$name-$stamp.log"
-$checks = $checks.Replace('<this working folder>', $wt.Replace([string][char]92, '/'))   # from project.ps1
+$checks = $checks.Replace('<this working folder>', "$wslRoot/.claude/worktrees/$name")   # from project.ps1
 if ($job.kind -eq 'issue') {
     $what = "issue #$($job.number) $($job.title)"
     $intentNote = if ($job.intent -eq 'architect') { "This issue is labelled architect: deliver a design, not the full implementation. Write a short design doc under design/ at the repo root (docs/ is gitignored), open a PR with it, and file the follow-up implement issues (complete briefs per .factory/AGENTS.md)." } else { '' }
@@ -176,10 +176,10 @@ if ($ds) {
     $saved = @{}
     $vars = @{ ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic'; ANTHROPIC_AUTH_TOKEN = $env:DEEPSEEK_API_KEY; ANTHROPIC_MODEL = $model; ANTHROPIC_SMALL_FAST_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_OPUS_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_SONNET_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_HAIKU_MODEL = 'deepseek-flash'; CLAUDE_CODE_SUBAGENT_MODEL = 'deepseek-flash'; WSLENV = 'ANTHROPIC_BASE_URL:ANTHROPIC_AUTH_TOKEN:ANTHROPIC_MODEL:ANTHROPIC_SMALL_FAST_MODEL:ANTHROPIC_DEFAULT_OPUS_MODEL:ANTHROPIC_DEFAULT_SONNET_MODEL:ANTHROPIC_DEFAULT_HAIKU_MODEL:CLAUDE_CODE_SUBAGENT_MODEL' }
     foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
-    $wslWt = (wsl.exe -e wslpath -u $wt) -join ''
+    $wslWt = "$wslRoot/.claude/worktrees/$name"
     $wslState = (wsl.exe -e wslpath -u $state) -join ''
-    $perm = if ($env:JIVA_DEEPSEEK_ARGS) { $env:JIVA_DEEPSEEK_ARGS } else { "--permission-mode acceptEdits --allowedTools 'Bash(git *)' 'Bash(gh *)' 'Bash(powershell.exe *)' 'Bash(python3 *)' 'Bash(bash /mnt/d/nuvio-factory/NuvioTV/.factory/build.sh *)' 'Bash(/mnt/c/Program Files/Git/cmd/git.exe *)' 'Bash(ls *)' 'Bash(grep *)' 'Bash(find *)'" }
-    $cmd = "cd '$wslWt' && env -u ANTHROPIC_API_KEY claude -p $perm --add-dir '$wslState' --output-format json '$($prompt.Replace("'", '').Replace('D:\', '/mnt/d/').Replace('\', '/'))'"
+    $perm = if ($env:JIVA_DEEPSEEK_ARGS) { $env:JIVA_DEEPSEEK_ARGS } else { "--permission-mode acceptEdits --allowedTools 'Bash(git *)' 'Bash(gh *)' 'Bash(powershell.exe *)' 'Bash(python3 *)' 'Bash(bash /home/techmuzz/nuvio/factory/nuvio-tv/.factory/build.sh *)' 'Bash(/mnt/c/Program Files/Git/cmd/git.exe *)' 'Bash(ls *)' 'Bash(grep *)' 'Bash(find *)'" }
+    $cmd = "cd '$wslWt' && env -u ANTHROPIC_API_KEY claude -p $perm --add-dir '$wslState' --output-format json '$($prompt.Replace("'", '').Replace($root, $wslRoot).Replace('C:\', '/mnt/c/').Replace('\', '/'))'"
     try {
         $process = Start-Process -FilePath wsl.exe -ArgumentList @('-e', 'bash', '-lc', "`"$cmd`"") -WorkingDirectory $wt `
             -RedirectStandardOutput $log -RedirectStandardError "$log.err" -WindowStyle Hidden -PassThru

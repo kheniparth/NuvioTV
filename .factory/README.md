@@ -5,17 +5,17 @@ The build loop for one project: a 30-minute router run (formerly the tick) start
 ## Look at it
 
 ```bash
-/mnt/d/nuvio-factory/NuvioTV/.factory/status        # tick health, review, worker, PRs, issues, warnings (no model call)
-/mnt/d/nuvio-factory/NuvioTV/.factory/freeze        # pause Cursor; -Off resumes, -Status reports (-DeepSeek for that worker)
-/mnt/d/nuvio-factory/NuvioTV/.factory/router -DryRun # what the next router run would do
+/home/techmuzz/nuvio/factory/nuvio-tv/.factory/status        # tick health, review, worker, PRs, issues, warnings (no model call)
+/home/techmuzz/nuvio/factory/nuvio-tv/.factory/freeze        # pause Cursor; -Off resumes, -Status reports (-DeepSeek for that worker)
+/home/techmuzz/nuvio/factory/nuvio-tv/.factory/router -DryRun # what the next router run would do
 ```
 
 ## Console UI
 
 ```bash
-python3 /mnt/d/nuvio-factory/NuvioTV/.factory/ui/tui.py          # live panels; f/d/c freeze cursor/deepseek/claude, q quits
-python3 /mnt/d/nuvio-factory/NuvioTV/.factory/ui/tui.py --once   # print one snapshot
-python3 /mnt/d/nuvio-factory/NuvioTV/.factory/ui/server.py       # web version on http://127.0.0.1:8787
+python3 /home/techmuzz/nuvio/factory/nuvio-tv/.factory/ui/tui.py          # live panels; f/d/c freeze cursor/deepseek/claude, q quits
+python3 /home/techmuzz/nuvio/factory/nuvio-tv/.factory/ui/tui.py --once   # print one snapshot
+python3 /home/techmuzz/nuvio/factory/nuvio-tv/.factory/ui/server.py       # web version on http://127.0.0.1:8787
 ```
 
 ## Files

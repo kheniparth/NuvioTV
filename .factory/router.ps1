@@ -56,7 +56,36 @@ function Review {
     $claude = if ($env:JIVA_CLAUDE) { $env:JIVA_CLAUDE } else { (Get-Command claude -ErrorAction SilentlyContinue).Source }
     $wsl = -not $claude -and (wsl.exe -e bash -lc 'command -v claude' 2>$null)
     if (-not $claude -and -not $wsl) { return "due ($($why -join '; ')) but the claude CLI was not found: install it and log in, or set JIVA_CLAUDE" }
-    if ($DryRun) { return "would start: $($why -join '; ')" }
+    # Owner wants Claude tokens saved: the review runs on DeepSeek (Claude CLI in WSL, DeepSeek API) whenever the key is set,
+    # and waits out DeepSeek's peak-price window instead of falling back to Claude. FACTORY_REVIEW_CLAUDE=1 forces Claude.
+    # shortcut: when DeepSeek also wrote the PR (Cursor frozen or unavailable) it reviews its own work; add a second reviewer if that starts to bite.
+    . "$PSScriptRoot/workers.ps1"
+    $dsKey = if ($env:DEEPSEEK_API_KEY) { $env:DEEPSEEK_API_KEY } else { [Environment]::GetEnvironmentVariable('DEEPSEEK_API_KEY', 'User') }
+    $useDs = $dsKey -and -not $env:FACTORY_REVIEW_CLAUDE
+    if ($useDs) {
+        $dsCfg = (Get-Content (Join-Path $PSScriptRoot 'workers.json') -Raw | ConvertFrom-Json).workers.deepseek
+        $peak = Get-ScheduleFreeze $dsCfg
+        if ($peak -and -not $ReviewNow) { return "due ($($why -join '; ')) but DeepSeek is frozen ($peak); the review waits" }
+        if (-not (wsl.exe -e bash -lc 'command -v claude' 2>$null)) { return "due but claude is not installed in WSL (needed for the DeepSeek review)" }
+    }
+    if ($DryRun) { return "would start$(if ($useDs) { ' on DeepSeek' }): $($why -join '; ')" }
+    if ($useDs) {
+        $log = Join-Path $state "review-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+        $prompt = "Run git -c safe.directory=* -C $root pull --ff-only through powershell.exe. Then read $wslRoot/.factory/review.md and follow it exactly for this whole run; it is the only copy of these instructions. Your shell is WSL bash: run every PowerShell step of review.md with powershell.exe -NoProfile -Command, and the checks with bash /home/techmuzz/nuvio/factory/nuvio-tv/.factory/build.sh. Your trigger: $($why -join '; ')."
+        $vars = @{ ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic'; ANTHROPIC_AUTH_TOKEN = $dsKey; ANTHROPIC_MODEL = 'deepseek-flash'; ANTHROPIC_SMALL_FAST_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_OPUS_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_SONNET_MODEL = 'deepseek-flash'; ANTHROPIC_DEFAULT_HAIKU_MODEL = 'deepseek-flash'; CLAUDE_CODE_SUBAGENT_MODEL = 'deepseek-flash'; WSLENV = 'ANTHROPIC_BASE_URL:ANTHROPIC_AUTH_TOKEN:ANTHROPIC_MODEL:ANTHROPIC_SMALL_FAST_MODEL:ANTHROPIC_DEFAULT_OPUS_MODEL:ANTHROPIC_DEFAULT_SONNET_MODEL:ANTHROPIC_DEFAULT_HAIKU_MODEL:CLAUDE_CODE_SUBAGENT_MODEL' }
+        $perm = "--permission-mode acceptEdits --allowedTools 'Bash(git *)' 'Bash(gh *)' 'Bash(gh.exe *)' 'Bash(powershell.exe *)' 'Bash(bash /home/techmuzz/nuvio/factory/nuvio-tv/.factory/build.sh *)' 'Bash(/mnt/c/Program Files/Git/cmd/git.exe *)' 'Bash(~/Android/Sdk/platform-tools/adb *)' 'Bash(ls *)' 'Bash(grep *)' 'Bash(find *)' 'Bash(cat *)'"
+        $cmd = "cd $wslRoot && env -u ANTHROPIC_API_KEY claude -p $perm --output-format text '$($prompt -replace "'", '')'"
+        $saved = @{}
+        foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+        try {
+            $p = Start-Process -FilePath wsl.exe -WorkingDirectory $root -WindowStyle Hidden -PassThru -ArgumentList @('-e', 'bash', '-lc', "`"$cmd`"") `
+                -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+        } finally { foreach ($k in $vars.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
+        @{ pid = $p.Id; what = ($why -join '; '); started = (Get-Date -Format s); log = $log; worker = 'deepseek' } | ConvertTo-Json | Set-Content $lock -Encoding utf8
+        $marks | ForEach-Object { Set-Content $_ (Get-Date -Format s) -Encoding utf8 }
+        Set-Content $stamp (Get-Date -Format s) -Encoding utf8
+        return "started on DeepSeek: $($why -join '; ') (pid $($p.Id))"
+    }
 
     $perm = if ($env:JIVA_CLAUDE_ARGS) { @($env:JIVA_CLAUDE_ARGS -split ' ') } else { @('--permission-mode', 'acceptEdits') }
     $log = Join-Path $state "review-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"

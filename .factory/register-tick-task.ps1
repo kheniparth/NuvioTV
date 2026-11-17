@@ -1,6 +1,6 @@
 # Registers the beast Windows Scheduled Task that runs .factory/tick.ps1 every 30 minutes
 # on its own (the one history, $history from project.ps1, holds tick lines and review output; rotated to .1 at 1 MB), with no model call unless review work is due. Run once on beast:
-#   powershell -File D:\nuvio-factory\NuvioTV\.factory\register-tick-task.ps1
+#   powershell -File \\wsl.localhost\Ubuntu\home\techmuzz\nuvio\factory\nuvio-tv\.factory\register-tick-task.ps1
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/project.ps1"
 # conhost --headless: Windows 11 hands consoles to Windows Terminal, so powershell.exe alone pops a window that steals focus every tick.

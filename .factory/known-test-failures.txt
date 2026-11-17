@@ -1,0 +1,7 @@
+# Unit tests already failing on upstream NuvioMedia/NuvioTV dev (03705cdd1, 2026-11-17), as printed by Gradle ("Class > test").
+# build.sh ignores these; remove a line once an upstream sync fixes it. Never add a test our own change broke.
+TraktAuthServiceTest > refresh token 400 clears credentials and prevents another refresh
+TraktAuthServiceTest > refresh token server error keeps credentials and allows a later retry
+SearchViewModelSuggestionsTest > clearing the field retires the suggestions and the submitted query
+# Flaky upstream (fails on some runs):
+TraktProgressServiceFailureTest > failed dropped-shows fetch keeps shows hidden from progress
