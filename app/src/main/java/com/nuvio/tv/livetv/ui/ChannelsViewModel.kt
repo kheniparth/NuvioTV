@@ -84,10 +84,10 @@ class ChannelsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             try {
-                val loaded = repository.loadCatalog()
+                val loaded = repository.loadCatalog(System.currentTimeMillis())
                 catalog.value = loaded
                 favoriteIds.value = loaded.favoriteIds
-                status.value = Status(loading = false, error = loaded.loadError)
+                status.value = Status(loading = false)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Exception) {
@@ -126,14 +126,14 @@ class ChannelsViewModel @Inject constructor(
             playing = true
             try {
                 val resolved = repository.resolvePlayableUrl(channel)
-                if (resolved.streamUrl.isBlank()) error("No stream URL")
+                if (resolved.url.isBlank()) error("No stream URL")
                 repository.recordRecent(channel.id)
                 play.emit(
                     LiveTvPlayRequest(
-                        streamUrl = resolved.streamUrl,
-                        title = resolved.name,
+                        streamUrl = resolved.url,
+                        title = channel.name,
                         headers = resolved.headers,
-                        logoUrl = resolved.logoUrl,
+                        logoUrl = channel.logoUrl,
                     )
                 )
             } catch (cancel: CancellationException) {
@@ -167,7 +167,7 @@ internal fun buildChannelRows(
         val inCategory = when (category) {
             ChannelCategory.All -> true
             ChannelCategory.Favourites -> channel.id in favoriteIds
-            is ChannelCategory.Group -> channel.group == category.name
+            is ChannelCategory.Group -> channel.group?.trim() == category.name
         }
         if (!inCategory || (needle.isNotEmpty() && !channel.name.contains(needle, ignoreCase = true))) {
             return@mapNotNull null

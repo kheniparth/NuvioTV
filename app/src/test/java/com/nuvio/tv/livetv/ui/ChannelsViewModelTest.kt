@@ -4,6 +4,7 @@ import com.nuvio.tv.MainDispatcherRule
 import com.nuvio.tv.livetv.data.LiveTvCatalog
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvEpgProgram
+import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.XmltvGuide
 import io.mockk.coEvery
@@ -84,9 +85,8 @@ class ChannelsViewModelTest {
     @Test
     fun `play records the channel in recents after the url resolves`() = runTest {
         val repository = repository(catalog())
-        coEvery { repository.resolvePlayableUrl(any()) } coAnswers {
-            firstArg<LiveTvChannel>().copy(streamUrl = "http://play", headers = mapOf("User-Agent" to "VLC"))
-        }
+        coEvery { repository.resolvePlayableUrl(any()) } returns
+            LiveTvPlayable("http://play", mapOf("User-Agent" to "VLC"))
         val viewModel = ChannelsViewModel(repository)
         val plays = mutableListOf<LiveTvPlayRequest>()
         val collect = launch { viewModel.playRequests.collect { plays += it } }
@@ -121,10 +121,10 @@ class ChannelsViewModelTest {
     private fun viewModel(catalog: LiveTvCatalog) = ChannelsViewModel(repository(catalog))
 
     private fun repository(catalog: LiveTvCatalog): LiveTvRepository = mockk {
-        coEvery { loadCatalog() } returns catalog
+        coEvery { loadCatalog(any()) } returns catalog
         coEvery { toggleFavorite(any()) } returns Unit
         coEvery { recordRecent(any()) } returns Unit
-        coEvery { resolvePlayableUrl(any()) } answers { firstArg() }
+        coEvery { resolvePlayableUrl(any()) } returns LiveTvPlayable("http://c1", emptyMap())
     }
 
     private fun names(viewModel: ChannelsViewModel) = viewModel.uiState.value.rows.map { it.channel.name }
