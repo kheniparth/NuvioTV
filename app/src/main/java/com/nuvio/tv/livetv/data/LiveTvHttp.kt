@@ -1,0 +1,68 @@
+package com.nuvio.tv.livetv.data
+
+import java.net.URLEncoder
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+
+data class LiveTvRawResponse(val code: Int, val body: String)
+
+/**
+ * The app OkHttpClient replaces User-Agent and may cache GETs. Portal calls need their own
+ * agent (Stalker rejects anything but a MAG box) and a fresh token, so both are undone here.
+ */
+@Singleton
+class LiveTvHttp @Inject constructor(client: OkHttpClient) {
+    private val http = client.newBuilder()
+        .cache(null)
+        .addInterceptor { chain ->
+            val override = chain.request().header(USER_AGENT_OVERRIDE) ?: return@addInterceptor chain.proceed(chain.request())
+            chain.proceed(
+                chain.request().newBuilder()
+                    .header("User-Agent", override)
+                    .removeHeader(USER_AGENT_OVERRIDE)
+                    .build()
+            )
+        }
+        .build()
+
+    suspend fun getText(url: String, headers: Map<String, String> = emptyMap()): String {
+        val response = requestRaw("GET", url, headers)
+        if (response.code !in 200..299) error("HTTP ${response.code}")
+        return response.body
+    }
+
+    suspend fun requestRaw(
+        method: String,
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        body: String = "",
+    ): LiveTvRawResponse = withContext(Dispatchers.IO) {
+        val noBody = method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)
+        val request = Request.Builder()
+            .url(url)
+            .method(method, if (noBody) null else body.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+            .apply {
+                headers.forEach { (key, value) ->
+                    header(key, value)
+                    if (key.equals("User-Agent", ignoreCase = true)) header(USER_AGENT_OVERRIDE, value)
+                }
+            }
+            .build()
+        http.newCall(request).execute().use { response ->
+            LiveTvRawResponse(response.code, response.body?.string().orEmpty())
+        }
+    }
+
+    private companion object {
+        const val USER_AGENT_OVERRIDE = "X-LiveTv-User-Agent"
+    }
+}
+
+internal fun liveTvEncode(value: String): String =
+    URLEncoder.encode(value, "UTF-8").replace("+", "%20")
