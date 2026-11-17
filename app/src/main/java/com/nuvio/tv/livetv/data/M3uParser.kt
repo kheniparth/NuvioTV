@@ -45,7 +45,7 @@ fun parseM3uPlaylist(
                         id = stableChannelId(streamUrl, channels.size),
                         name = name,
                         streamUrl = streamUrl,
-                        logoUrl = info?.logoUrl?.takeIf(String::isNotBlank),
+                        logoUrl = resolveLogoUrl(info?.logoUrl, playlist?.source.orEmpty()),
                         group = info?.group?.takeIf(String::isNotBlank),
                         playlistId = playlist?.id,
                         playlistName = playlist?.name,
@@ -61,6 +61,18 @@ fun parseM3uPlaylist(
         }
 
     return channels.distinctBy { it.streamUrl }
+}
+
+/** `url-tvg`, `x-tvg-url` and `tvg-url` on the first `#EXTM3U` line. Comma-separated, http(s) only. */
+fun parseM3uEpgUrls(payload: String): List<String> {
+    val header = payload.lineSequence().map(String::trim).firstOrNull(String::isNotBlank) ?: return emptyList()
+    if (!header.startsWith("#EXTM3U", ignoreCase = true)) return emptyList()
+    return listOf("url-tvg", "x-tvg-url", "tvg-url")
+        .mapNotNull { key -> readM3uAttribute(header, key) }
+        .flatMap { value -> value.split(',') }
+        .map(String::trim)
+        .filter { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+        .distinct()
 }
 
 private data class M3uInfo(
@@ -197,11 +209,20 @@ private fun defaultLiveTvStreamHeaders(url: String): Map<String, String> =
 
 private fun readM3uAttribute(line: String, key: String): String? {
     val marker = "$key=\""
-    val start = line.indexOf(marker, ignoreCase = true)
-    if (start < 0) return null
-    val valueStart = start + marker.length
-    val valueEnd = line.indexOf('"', startIndex = valueStart).takeIf { it >= 0 } ?: return null
-    return line.substring(valueStart, valueEnd).trim()
+    var from = 0
+    while (from < line.length) {
+        val start = line.indexOf(marker, from, ignoreCase = true)
+        if (start < 0) return null
+        val before = line.getOrNull(start - 1)
+        // `tvg-url` is a suffix of `x-tvg-url`; only a real attribute boundary counts.
+        if (before == null || before.isWhitespace()) {
+            val valueStart = start + marker.length
+            val valueEnd = line.indexOf('"', valueStart).takeIf { it >= 0 } ?: return null
+            return line.substring(valueStart, valueEnd).trim()
+        }
+        from = start + marker.length
+    }
+    return null
 }
 
 private fun stableChannelId(streamUrl: String, index: Int): String =

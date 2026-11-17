@@ -66,9 +66,18 @@ fun XmltvGuide.programsInWindow(
     }
 }
 
-fun XmltvGuide.nowNext(tvgId: String, nowMillis: Long): LiveTvNowNext {
-    val key = epgKey(tvgId)
-    val list = if (key.isEmpty()) emptyList() else programsByTvgId[key].orEmpty()
+fun XmltvGuide.nowNext(tvgId: String, nowMillis: Long): LiveTvNowNext =
+    nowNextFor(channelId = "", epgId = tvgId, nowMillis = nowMillis)
+
+/** XMLTV id first, then the channel id (Stalker `get_epg_info` is keyed `stalker:<id>`). */
+fun XmltvGuide.programsFor(channelId: String, epgId: String?): List<LiveTvEpgProgram> {
+    val byEpg = epgId?.let(::epgKey)?.takeIf(String::isNotEmpty)?.let { programsByTvgId[it] }.orEmpty()
+    if (byEpg.isNotEmpty()) return byEpg
+    return epgKey(channelId).takeIf(String::isNotEmpty)?.let { programsByTvgId[it] }.orEmpty()
+}
+
+fun XmltvGuide.nowNextFor(channelId: String, epgId: String?, nowMillis: Long): LiveTvNowNext {
+    val list = programsFor(channelId, epgId)
     val now = list.firstOrNull { it.isAiringAt(nowMillis) }
     val next = if (now != null) {
         list.firstOrNull { it.startMillis >= now.endMillis }
