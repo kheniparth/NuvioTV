@@ -48,6 +48,7 @@ scripts/*
 !scripts/release_notes/*.py
 !scripts/livetv-bootstrap.sh
 !scripts/livetv-bootstrap.py
+!scripts/upstream-sync.sh
 !scripts/release-metadata.sh
 !scripts/release_beta.py
 !scripts/tests/

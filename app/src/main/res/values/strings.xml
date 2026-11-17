@@ -3492,4 +3492,35 @@
     <string name="autosync_label_synced">Auto synced</string>
     <string name="stream_resume_from_time">Resume from %1$s</string>
     <string name="stream_resume_from_percent">Resume from %1$d%%</string>
+
+    <string name="settings_live_tv">Live TV</string>
+    <string name="settings_live_tv_subtitle">M3U playlists, Xtream, Stalker Portal and EPG sources.</string>
+    <string name="livetv_m3u_section">M3U playlists</string>
+    <string name="livetv_xtream_section">Xtream</string>
+    <string name="livetv_stalker_section">Stalker Portal</string>
+    <string name="livetv_epg_section">EPG sources</string>
+    <string name="livetv_add_playlist">Add M3U playlist</string>
+    <string name="livetv_add_xtream">Add Xtream account</string>
+    <string name="livetv_add_stalker">Add Stalker Portal</string>
+    <string name="livetv_add_epg">Add EPG source</string>
+    <string name="livetv_xtream_account">Xtream account</string>
+    <string name="livetv_stalker_portal">Stalker Portal</string>
+    <string name="livetv_field_name">Name</string>
+    <string name="livetv_field_type">Type</string>
+    <string name="livetv_field_url">URL</string>
+    <string name="livetv_field_path">File path</string>
+    <string name="livetv_field_server">Server URL</string>
+    <string name="livetv_field_portal">Portal URL</string>
+    <string name="livetv_field_mac">MAC address</string>
+    <string name="livetv_field_username">Username</string>
+    <string name="livetv_field_password">Password</string>
+    <string name="livetv_type_url">URL</string>
+    <string name="livetv_type_file">Local file</string>
+    <string name="livetv_enabled">Enabled</string>
+    <string name="livetv_disabled">Disabled</string>
+    <string name="livetv_test_connection">Test connection</string>
+    <string name="livetv_testing">Testing…</string>
+    <string name="livetv_test_channels">%1$d channels</string>
+    <string name="livetv_test_connected">Connected</string>
+    <string name="livetv_test_failed">Failed: %1$s</string>
 </resources>
