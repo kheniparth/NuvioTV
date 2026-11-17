@@ -3558,4 +3558,5 @@
     <string name="livetv_next">Next: %1$s</string>
     <string name="livetv_favourite">Favourite</string>
     <string name="livetv_unfavourite">Remove favourite</string>
+    <string name="livetv_channels">Channels</string>
 </resources>
