@@ -1313,7 +1313,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.LiveTvOnDemand.route) {
+        rootComposable(Screen.LiveTvOnDemand.route) {
             OnDemandScreen(
                 onPlay = { playback ->
                     navController.navigate(
