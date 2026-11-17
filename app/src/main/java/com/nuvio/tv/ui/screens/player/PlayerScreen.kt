@@ -445,6 +445,7 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnDismissStillWatchingPrompt)
         } else if (showLiveChannels) {
             showLiveChannels = false
+            runCatching { containerFocusRequester.requestFocus() }
         } else if (uiState.showControls) {
             viewModel.hideControls()
         } else {
