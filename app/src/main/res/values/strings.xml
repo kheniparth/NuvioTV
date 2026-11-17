@@ -2515,6 +2515,7 @@
     <string name="nav_discover">Discover</string>
     <string name="nav_search">Search</string>
     <string name="nav_library">Library</string>
+    <string name="nav_live_tv">Live TV</string>
     <string name="nav_addons">Addons</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_series">Series</string>
@@ -3527,4 +3528,29 @@
     <string name="livetv_test_channels">%1$d channels</string>
     <string name="livetv_test_connected">Connected</string>
     <string name="livetv_test_failed">Failed: %1$s</string>
+    <string name="livetv_on_demand_title">On Demand</string>
+    <string name="livetv_on_demand_movies">Movies</string>
+    <string name="livetv_on_demand_series">Series</string>
+    <string name="livetv_on_demand_favorites">Favourites</string>
+    <string name="livetv_on_demand_all">All</string>
+    <string name="livetv_on_demand_search">Search On Demand</string>
+    <string name="livetv_on_demand_clear_search">Clear search</string>
+    <string name="livetv_on_demand_empty">No titles match.</string>
+    <string name="livetv_on_demand_no_source">Add an Xtream or Stalker source in Live TV settings.</string>
+    <string name="livetv_on_demand_retry">Retry</string>
+    <string name="livetv_on_demand_no_episodes">No episodes found.</string>
+    <string name="livetv_on_demand_episode">Episode %1$d</string>
+    <string name="livetv_on_demand_season">Season %1$d</string>
+    <string name="livetv_on_demand_favorite_hint">Hold OK on a title to add or remove a favourite</string>
+    <string name="livetv_on_demand_play_failed">Could not start this title.</string>
+    <string name="livetv_search">Search channels</string>
+    <string name="livetv_category_all">All</string>
+    <string name="livetv_category_favourites">Favourites</string>
+    <string name="livetv_loading">Loading channels…</string>
+    <string name="livetv_empty">No channels</string>
+    <string name="livetv_now_next">%1$s  ·  Next: %2$s</string>
+    <string name="livetv_now">%1$s</string>
+    <string name="livetv_next">Next: %1$s</string>
+    <string name="livetv_favourite">Favourite</string>
+    <string name="livetv_unfavourite">Remove favourite</string>
 </resources>

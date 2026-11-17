@@ -51,6 +51,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -335,6 +337,9 @@ open class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var partyRepository: PartyRepository
+
+    @Inject
+    lateinit var liveTvRepository: com.nuvio.tv.livetv.data.LiveTvRepository
 
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
@@ -1099,7 +1104,18 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val rootRoutes = remember(discoverLocation) {
+                    val liveTvAvailable by liveTvRepository.hasConfiguredSource.collectAsState(initial = false)
+                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route)
+                    LaunchedEffect(liveTvAvailable, currentRoute) {
+                        if (!liveTvAvailable && liveTvRoutes.any { it == currentRoute }) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+
+                    val rootRoutes = remember(discoverLocation, liveTvAvailable) {
                         buildSet {
                             add(Screen.Home.route)
                             add(Screen.Search.route)
@@ -1108,6 +1124,10 @@ open class MainActivity : ComponentActivity() {
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(Screen.Discover.route)
                             }
+                            if (liveTvAvailable) {
+                                add(Screen.LiveTv.route)
+                                add(Screen.LiveTvOnDemand.route)
+                            }
                         }
                     }
 
@@ -1115,14 +1135,19 @@ open class MainActivity : ComponentActivity() {
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
+                    val strNavLiveTv = stringResource(R.string.nav_live_tv)
+                    val strNavOnDemand = stringResource(R.string.livetv_on_demand_title)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
+                        strNavLiveTv,
+                        strNavOnDemand,
                         strNavSettings,
-                        discoverLocation
+                        discoverLocation,
+                        liveTvAvailable
                     ) {
                         buildList {
                             add(
@@ -1155,6 +1180,22 @@ open class MainActivity : ComponentActivity() {
                                     iconRes = R.raw.sidebar_library
                                 )
                             )
+                            if (liveTvAvailable) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTv.route,
+                                        label = strNavLiveTv,
+                                        icon = Icons.Default.LiveTv
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvOnDemand.route,
+                                        label = strNavOnDemand,
+                                        icon = Icons.Default.Movie
+                                    )
+                                )
+                            }
                             add(
                                 DrawerItem(
                                     route = Screen.Settings.route,
