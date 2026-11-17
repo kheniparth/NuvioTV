@@ -27,7 +27,7 @@ Write PR and comment bodies to a file and pass --body-file.
 function Get-WorkerStatus {
     # Two lanes: running.json (Cursor, or DeepSeek when Cursor is out) and running-deepseek.json (the parallel DeepSeek lane).
     $lockNote = $null; $run = @(); $warn = @()
-    foreach ($lockFile in (Join-Path $state 'running.json'), (Join-Path $state 'running-deepseek.json')) {
+    foreach ($lockFile in @(Get-ChildItem $state -Filter 'running*.json' | ForEach-Object FullName)) {
         if (-not (Test-Path $lockFile)) { continue }
         $r = Get-Content $lockFile -Raw | ConvertFrom-Json
         $mins = [int]((Get-Date) - [datetime]$r.started).TotalMinutes
