@@ -34,6 +34,7 @@ import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.party.PartyMedia
 import com.nuvio.tv.domain.model.ExperienceMode
+import com.nuvio.tv.livetv.ui.GuideScreen
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
 import com.nuvio.tv.ui.screens.ExperienceModeSelectionScreen
@@ -1356,6 +1357,24 @@ private fun PlaybackNavHost(
         composable(Screen.PlaybackSettings.route) {
             PlaybackSettingsScreen(
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.LiveTvGuide.route) {
+            GuideScreen(
+                onPlayChannel = { channel, playable ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playable.url,
+                            title = channel.name,
+                            headers = playable.headers,
+                            contentId = channel.id,
+                            contentType = "channel",
+                            contentName = channel.name,
+                            logo = channel.logoUrl
+                        )
+                    )
+                }
             )
         }
 

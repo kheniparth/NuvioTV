@@ -104,6 +104,31 @@ class LiveTvRepositoryTest {
         coVerify(exactly = 1) { http.getBytes(any(), any()) }
     }
 
+    @Test
+    fun `epgForChannels maps every channel from one parsed guide`() = runTest {
+        val xml = """
+            <tv>
+              <programme start="20261117120000 +0000" stop="20261117130000 +0000" channel="bbc1"><title>News</title></programme>
+              <programme start="20261117120000 +0000" stop="20261117130000 +0000" channel="BBC2"><title>Sport</title></programme>
+            </tv>
+        """.trimIndent()
+        val provider = FakeSources(LiveTvSources(epgSources = listOf(LiveTvEpgSource("e", "Guide", "https://epg.xml"))))
+        coEvery { http.getBytes("https://epg.xml", any()) } returns xml.toByteArray()
+        val repo = repo(provider, LiveTvCache(tempDir()))
+        val channels = listOf(
+            LiveTvChannel(id = "1", name = "One", streamUrl = "http://one", epgId = "bbc1"),
+            LiveTvChannel(id = "2", name = "Two", streamUrl = "http://two", epgId = "BBC2"),
+            LiveTvChannel(id = "3", name = "Three", streamUrl = "http://three"),
+        )
+
+        val guide = repo.epgForChannels(channels, nowMillis = 0L)
+
+        assertEquals(listOf("News"), guide["1"]?.map { it.title })
+        assertEquals(listOf("Sport"), guide["2"]?.map { it.title })
+        assertEquals(setOf("1", "2"), guide.keys)
+        coVerify(exactly = 1) { http.getBytes("https://epg.xml", any()) }
+    }
+
     private fun repo(sources: LiveTvSourceProvider, cache: LiveTvCache) =
         LiveTvRepository(sources, http, xtream, stalker, cache)
 

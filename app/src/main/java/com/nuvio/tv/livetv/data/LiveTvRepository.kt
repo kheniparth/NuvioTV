@@ -66,6 +66,19 @@ class LiveTvRepository @Inject constructor(
         return guide(nowMillis)[key].orEmpty()
     }
 
+    /** Loads the whole guide once and maps it to [channels] by channel id. */
+    suspend fun epgForChannels(
+        channels: List<LiveTvChannel>,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Map<String, List<LiveTvEpgProgram>> {
+        if (channels.none { !it.epgId.isNullOrBlank() }) return emptyMap()
+        val guide = guide(nowMillis)
+        return channels.mapNotNull { channel ->
+            val key = channel.epgId?.trim()?.lowercase().orEmpty()
+            if (key.isEmpty()) null else channel.id to guide[key].orEmpty()
+        }.toMap()
+    }
+
     suspend fun resolvePlayableUrl(channel: LiveTvChannel): LiveTvPlayable {
         val settings = if (channel.stalkerCommand.isNullOrBlank()) null else sources.current().stalker
         val resolved = if (settings == null) channel else stalker.createLink(channel, settings)
