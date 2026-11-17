@@ -167,7 +167,7 @@ private fun GuideContent(
     onChannelClick: (LiveTvChannel) -> Unit,
 ) {
     val channels = remember(state.channels, state.selectedCategory) {
-        state.channels.filter { state.selectedCategory == null || it.group == state.selectedCategory }
+        state.channels.filter { state.selectedCategory == null || it.group?.trim() == state.selectedCategory }
     }
     val nowMillis = rememberGuideNowMillis()
     val windowStart = remember(state.nowMillis) { guideWindowStart(state.nowMillis) }

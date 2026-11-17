@@ -1400,7 +1400,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.LiveTvGuide.route) {
+        rootComposable(Screen.LiveTvGuide.route) {
             GuideScreen(
                 onPlayChannel = { channel, playable ->
                     navController.navigate(

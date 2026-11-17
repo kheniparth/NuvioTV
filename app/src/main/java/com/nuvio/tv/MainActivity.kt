@@ -49,6 +49,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -1105,7 +1106,7 @@ open class MainActivity : ComponentActivity() {
                     }
 
                     val liveTvAvailable by liveTvRepository.hasConfiguredSource.collectAsState(initial = false)
-                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route)
+                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route, Screen.LiveTvGuide.route)
                     LaunchedEffect(liveTvAvailable, currentRoute) {
                         if (!liveTvAvailable && liveTvRoutes.any { it == currentRoute }) {
                             navController.navigate(Screen.Home.route) {
@@ -1126,6 +1127,7 @@ open class MainActivity : ComponentActivity() {
                             }
                             if (liveTvAvailable) {
                                 add(Screen.LiveTv.route)
+                                add(Screen.LiveTvGuide.route)
                                 add(Screen.LiveTvOnDemand.route)
                             }
                         }
@@ -1137,6 +1139,7 @@ open class MainActivity : ComponentActivity() {
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavLiveTv = stringResource(R.string.nav_live_tv)
                     val strNavOnDemand = stringResource(R.string.livetv_on_demand_title)
+                    val strNavGuide = stringResource(R.string.livetv_guide_title)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
@@ -1145,6 +1148,7 @@ open class MainActivity : ComponentActivity() {
                         strNavLibrary,
                         strNavLiveTv,
                         strNavOnDemand,
+                        strNavGuide,
                         strNavSettings,
                         discoverLocation,
                         liveTvAvailable
@@ -1193,6 +1197,13 @@ open class MainActivity : ComponentActivity() {
                                         route = Screen.LiveTvOnDemand.route,
                                         label = strNavOnDemand,
                                         icon = Icons.Default.Movie
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvGuide.route,
+                                        label = strNavGuide,
+                                        icon = Icons.Default.DateRange
                                     )
                                 )
                             }
