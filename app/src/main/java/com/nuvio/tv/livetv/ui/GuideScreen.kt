@@ -5,6 +5,7 @@ package com.nuvio.tv.livetv.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -39,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,64 +184,86 @@ private fun GuideContent(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 24.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.livetv_guide_title),
-            style = MaterialTheme.typography.headlineMedium,
-            color = NuvioTheme.colors.TextPrimary,
-        )
-        Spacer(Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                SourceStatusFilterChip(
-                    name = stringResource(R.string.livetv_guide_all),
-                    isSelected = state.selectedCategory == null,
-                    onClick = { onCategorySelected(null) },
-                    onFocusSelect = { onCategorySelected(null) },
-                )
-            }
-            items(state.categories, key = { it }) { category ->
-                SourceStatusFilterChip(
-                    name = category,
-                    isSelected = state.selectedCategory == category,
-                    onClick = { onCategorySelected(category) },
-                    onFocusSelect = { onCategorySelected(category) },
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        GuideTimeRuler(windowStart = windowStart, nowMillis = nowMillis, scrollState = timelineScroll)
-        when {
-            state.loading && state.channels.isEmpty() -> Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) { LoadingIndicator() }
-            state.failed && state.channels.isEmpty() -> EmptyScreenState(
-                title = stringResource(R.string.livetv_guide_load_failed),
-                modifier = Modifier.weight(1f),
+    var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
+    val listState = rememberLazyListState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 48.dp, vertical = 24.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.livetv_guide_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = NuvioTheme.colors.TextPrimary,
             )
-            channels.isEmpty() -> EmptyScreenState(
-                title = stringResource(R.string.livetv_guide_empty),
-                modifier = Modifier.weight(1f),
-            )
-            else -> LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                items(channels, key = { it.id }) { channel ->
-                    GuideRow(
-                        channel = channel,
-                        programmes = state.programs[channel.id].orEmpty(),
-                        windowStart = windowStart,
-                        nowMillis = nowMillis,
-                        scrollState = timelineScroll,
-                        focusRequester = firstFocus.takeIf { channel.id == channels.first().id },
-                        onClick = { onChannelClick(channel) },
+            Spacer(Modifier.height(12.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    SourceStatusFilterChip(
+                        name = stringResource(R.string.livetv_guide_all),
+                        isSelected = state.selectedCategory == null,
+                        onClick = { onCategorySelected(null) },
+                        onFocusSelect = { onCategorySelected(null) },
+                    )
+                }
+                items(state.categories, key = { it }) { category ->
+                    SourceStatusFilterChip(
+                        name = category,
+                        isSelected = state.selectedCategory == category,
+                        onClick = { onCategorySelected(category) },
+                        onFocusSelect = { onCategorySelected(category) },
                     )
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            GuideTimeRuler(windowStart = windowStart, nowMillis = nowMillis, scrollState = timelineScroll)
+            when {
+                state.loading && state.channels.isEmpty() -> Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) { LoadingIndicator() }
+                state.failed && state.channels.isEmpty() -> EmptyScreenState(
+                    title = stringResource(R.string.livetv_guide_load_failed),
+                    modifier = Modifier.weight(1f),
+                )
+                channels.isEmpty() -> EmptyScreenState(
+                    title = stringResource(R.string.livetv_guide_empty),
+                    modifier = Modifier.weight(1f),
+                )
+                else -> LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    state = listState,
+                ) {
+                    items(channels, key = { it.id }) { channel ->
+                        GuideRow(
+                            channel = channel,
+                            programmes = state.programs[channel.id].orEmpty(),
+                            windowStart = windowStart,
+                            nowMillis = nowMillis,
+                            scrollState = timelineScroll,
+                            focusRequester = firstFocus.takeIf { channel.id == channels.first().id },
+                            onClick = { onChannelClick(channel) },
+                            onFocusChanged = { focused ->
+                                previewChannel = when {
+                                    focused -> channel
+                                    previewChannel?.id == channel.id -> null
+                                    else -> previewChannel
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
+        LiveTvPreviewOverlay(
+            focusedChannel = previewChannel,
+            scrollInProgress = listState.isScrollInProgress,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(horizontal = 48.dp, vertical = 24.dp),
+        )
     }
 }
 
@@ -287,6 +313,7 @@ private fun GuideRow(
     scrollState: ScrollState,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
 ) {
     val format = rememberGuideTimeFormat()
     val cells = remember(programmes, windowStart) {
@@ -295,7 +322,14 @@ private fun GuideRow(
                 ?.let { programme to it }
         }
     }
-    Row(modifier = Modifier.fillMaxWidth().height(GuideRowHeight).padding(vertical = 2.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(GuideRowHeight)
+            .padding(vertical = 2.dp)
+            .focusGroup()
+            .onFocusChanged { onFocusChanged(it.hasFocus || it.isFocused) },
+    ) {
         GuideChannelCell(channel = channel, onClick = onClick, focusRequester = focusRequester)
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scrollState)) {
             // shortcut: a row composes only the programmes inside the bounded window; make it a LazyRow if the window grows.
