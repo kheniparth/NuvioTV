@@ -3,12 +3,13 @@ package com.nuvio.tv.livetv.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
@@ -103,12 +103,16 @@ fun SportsScreen(
     var playError by remember { mutableStateOf<String?>(null) }
     var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
     val listState = rememberLazyListState()
+    val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl),
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -135,6 +139,7 @@ fun SportsScreen(
                             nowMillis = state.nowMillis,
                             onChannel = { channel ->
                                 if (playing) return@SportsGameBlock
+                                previewViewModel.stopForPlayback()
                                 playing = true
                                 scope.launch {
                                     try {
@@ -160,12 +165,11 @@ fun SportsScreen(
                 }
             }
         }
-        LiveTvPreviewOverlay(
+        LiveTvPreviewPanel(
             focusedChannel = previewChannel,
             scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
+            modifier = Modifier.width(LiveTvPreviewPanelWidth),
+            viewModel = previewViewModel,
         )
     }
 }

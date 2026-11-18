@@ -177,6 +177,7 @@ private fun GuideContent(
     val windowStart = remember(state.nowMillis) { guideWindowStart(state.nowMillis) }
     val timelineScroll = rememberScrollState()
     val firstFocus = remember { FocusRequester() }
+    val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
 
     LaunchedEffect(state.loading, state.channels) {
         if (!state.loading && state.channels.isNotEmpty()) {
@@ -186,12 +187,18 @@ private fun GuideContent(
 
     var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
     val listState = rememberLazyListState()
+    val previewPrograms = previewChannel?.let { state.programs[it.id] }.orEmpty()
+    val nowTitle = previewPrograms.firstOrNull { it.startMillis <= nowMillis && nowMillis < it.endMillis }?.title
+    val nextTitle = previewPrograms.firstOrNull { it.startMillis > nowMillis }?.title
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 48.dp, vertical = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 48.dp, vertical = 24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
             Text(
                 text = stringResource(R.string.livetv_guide_title),
@@ -244,7 +251,10 @@ private fun GuideContent(
                             nowMillis = nowMillis,
                             scrollState = timelineScroll,
                             focusRequester = firstFocus.takeIf { channel.id == channels.first().id },
-                            onClick = { onChannelClick(channel) },
+                            onClick = {
+                                previewViewModel.stopForPlayback()
+                                onChannelClick(channel)
+                            },
                             onFocusChanged = { focused ->
                                 previewChannel = when {
                                     focused -> channel
@@ -257,12 +267,13 @@ private fun GuideContent(
                 }
             }
         }
-        LiveTvPreviewOverlay(
+        LiveTvPreviewPanel(
             focusedChannel = previewChannel,
+            nowTitle = nowTitle,
+            nextTitle = nextTitle,
             scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(horizontal = 48.dp, vertical = 24.dp),
+            modifier = Modifier.width(LiveTvPreviewPanelWidth),
+            viewModel = previewViewModel,
         )
     }
 }

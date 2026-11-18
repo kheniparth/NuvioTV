@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +39,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -57,9 +55,7 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import com.nuvio.tv.R
-import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -69,18 +65,27 @@ fun ChannelsScreen(
     viewModel: ChannelsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(viewModel) {
-        viewModel.playRequests.collect(onPlay)
+    val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
+    LaunchedEffect(viewModel, previewViewModel) {
+        viewModel.playRequests.collect { request ->
+            previewViewModel.stopForPlayback()
+            onPlay(request)
+        }
     }
 
-    var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
+    var previewRow by remember { mutableStateOf<ChannelRow?>(null) }
     val listState = rememberLazyListState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(NuvioTheme.spacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(NuvioTheme.spacing.lg),
+                .weight(0.6f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
         ) {
             Text(
@@ -124,10 +129,10 @@ fun ChannelsScreen(
                             onPlay = { viewModel.play(row.channel) },
                             onToggleFavorite = { viewModel.toggleFavorite(row.channel.id) },
                             onFocusChanged = { focused ->
-                                previewChannel = when {
-                                    focused -> row.channel
-                                    previewChannel?.id == row.channel.id -> null
-                                    else -> previewChannel
+                                previewRow = when {
+                                    focused -> row
+                                    previewRow?.channel?.id == row.channel.id -> null
+                                    else -> previewRow
                                 }
                             },
                         )
@@ -135,12 +140,13 @@ fun ChannelsScreen(
                 }
             }
         }
-        LiveTvPreviewOverlay(
-            focusedChannel = previewChannel,
+        LiveTvPreviewPanel(
+            focusedChannel = previewRow?.channel,
+            nowTitle = previewRow?.nowTitle,
+            nextTitle = previewRow?.nextTitle,
             scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(NuvioTheme.spacing.lg),
+            modifier = Modifier.weight(0.4f),
+            viewModel = previewViewModel,
         )
     }
 }
@@ -309,43 +315,6 @@ private fun ChannelLine(
             )
         }
     }
-}
-
-@Composable
-private fun ChannelLogo(channel: LiveTvChannel) {
-    val shape = RoundedCornerShape(8.dp)
-    if (channel.logoUrl.isNullOrBlank()) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(shape)
-                .background(NuvioTheme.colors.BackgroundElevated),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.LiveTv,
-                contentDescription = null,
-                tint = NuvioTheme.colors.TextSecondary,
-            )
-        }
-    } else {
-        AsyncImage(
-            model = channel.logoUrl,
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(shape),
-            contentScale = ContentScale.Crop,
-        )
-    }
-}
-
-@Composable
-private fun guideLine(nowTitle: String?, nextTitle: String?): String? = when {
-    nowTitle != null && nextTitle != null -> stringResource(R.string.livetv_now_next, nowTitle, nextTitle)
-    nowTitle != null -> stringResource(R.string.livetv_now, nowTitle)
-    nextTitle != null -> stringResource(R.string.livetv_next, nextTitle)
-    else -> null
 }
 
 @Composable
