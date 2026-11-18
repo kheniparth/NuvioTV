@@ -33,7 +33,7 @@ class XtreamClient @Inject constructor(private val http: LiveTvHttp) {
                 id = "xtream:$streamId",
                 name = name,
                 streamUrl = liveStreamUrl(normalized, streamId, extension),
-                logoUrl = item.string("stream_icon") ?: item.string("logo"),
+                logoUrl = resolveLogoUrl(item.string("stream_icon") ?: item.string("logo"), normalized.serverUrl),
                 group = item.string("category_id")?.let(categories::get),
                 playlistId = XTREAM_PLAYLIST_ID,
                 playlistName = "Xtream",

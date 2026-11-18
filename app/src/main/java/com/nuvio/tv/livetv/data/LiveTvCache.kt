@@ -11,6 +11,11 @@ internal const val LIVE_TV_EPG_CACHE_TTL_MILLIS = 24L * 60L * 60L * 1000L
  * Memory first, then `cacheDir/live_tv`.
  * shortcut: a crash mid-write can leave a bad file, it is ignored and fetched again.
  */
+internal data class CachedChannels(
+    val channels: List<LiveTvChannel>,
+    val epgUrls: List<String>?,
+)
+
 class LiveTvCache(private val dir: File) {
     private val gson = Gson()
     private val channelType = object : TypeToken<ChannelFile>() {}.type
@@ -18,15 +23,15 @@ class LiveTvCache(private val dir: File) {
     private var channels: ChannelFile? = null
     private var epg: EpgFile? = null
 
-    fun channels(signature: String): List<LiveTvChannel>? {
-        channels?.takeIf { it.signature == signature }?.let { return it.channels.map { channel -> channel.toModel() } }
+    internal fun channels(signature: String): CachedChannels? {
+        channels?.takeIf { it.signature == signature }?.let { return it.toCached() }
         val loaded = read<ChannelFile>("channels.json", channelType)?.takeIf { it.signature == signature } ?: return null
         channels = loaded
-        return loaded.channels.map { it.toModel() }
+        return loaded.toCached()
     }
 
-    fun saveChannels(signature: String, channels: List<LiveTvChannel>) {
-        val file = ChannelFile(signature, System.currentTimeMillis(), channels.map { it.toDto() })
+    fun saveChannels(signature: String, channels: List<LiveTvChannel>, epgUrls: List<String> = emptyList()) {
+        val file = ChannelFile(signature, System.currentTimeMillis(), channels.map { it.toDto() }, epgUrls)
         this.channels = file
         write("channels.json", file)
     }
@@ -62,7 +67,10 @@ class LiveTvCache(private val dir: File) {
         val signature: String,
         val savedAtMillis: Long,
         val channels: List<ChannelDto>,
+        val epgUrls: List<String>? = null,
     )
+
+    private fun ChannelFile.toCached() = CachedChannels(channels.map { it.toModel() }, epgUrls)
 
     private data class ChannelDto(
         val id: String? = null,
