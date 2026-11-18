@@ -37,7 +37,7 @@ class StalkerClient @Inject constructor(private val http: LiveTvHttp) {
                     id = "stalker:${item.string("id") ?: "$page:$index"}",
                     name = item.string("name") ?: item.string("title") ?: return@forEachIndexed,
                     streamUrl = url,
-                    logoUrl = item.string("logo") ?: item.string("logo_url"),
+                    logoUrl = resolveLogoUrl(item.string("logo") ?: item.string("logo_url"), normalized.portalUrl),
                     group = (item.string("tv_genre_id") ?: item.string("genre_id"))?.let(genres::get),
                     playlistId = STALKER_PLAYLIST_ID,
                     playlistName = "Stalker Portal",
@@ -48,6 +48,13 @@ class StalkerClient @Inject constructor(private val http: LiveTvHttp) {
             }
         }
         return channels.distinctBy { it.id }
+    }
+
+    /** Portal guide for the next 48 hours, keyed `stalker:<channel id>`. */
+    suspend fun epg(settings: LiveTvStalkerSettings): Map<String, List<LiveTvEpgProgram>> {
+        val normalized = settings.normalized()
+        val body = request(normalized, token(normalized), "itv", "get_epg_info", mapOf("period" to "48"))
+        return parseStalkerEpg(body)
     }
 
     suspend fun vodCatalog(settings: LiveTvStalkerSettings, kind: LiveTvVodKind): LiveTvVodCatalog {
@@ -263,3 +270,32 @@ class StalkerClient @Inject constructor(private val http: LiveTvHttp) {
         val json = Json { ignoreUnknownKeys = true; isLenient = true }
     }
 }
+
+internal fun parseStalkerEpg(root: JsonObject): Map<String, List<LiveTvEpgProgram>> {
+    val data = ((root["js"] as? JsonObject) ?: root)["data"] as? JsonObject ?: return emptyMap()
+    val programs = HashMap<String, MutableList<LiveTvEpgProgram>>()
+    data.forEach { (channelId, element) ->
+        val items = element as? JsonArray ?: return@forEach
+        val id = channelId.trim()
+        if (id.isEmpty()) return@forEach
+        val key = "stalker:$id".lowercase()
+        items.forEach { entry ->
+            val item = entry as? JsonObject ?: return@forEach
+            val title = item.epgString("name") ?: return@forEach
+            val start = item.epgString("start_timestamp")?.toLongOrNull()?.times(1000L) ?: return@forEach
+            val stop = item.epgString("stop_timestamp")?.toLongOrNull()?.times(1000L) ?: return@forEach
+            if (stop <= start) return@forEach
+            programs.getOrPut(key) { mutableListOf() } += LiveTvEpgProgram(
+                title = title,
+                startMillis = start,
+                endMillis = stop,
+                description = item.epgString("descr") ?: item.epgString("description"),
+                category = item.epgString("category"),
+            )
+        }
+    }
+    return programs.mapValues { (_, list) -> list.sortedBy { it.startMillis }.distinctBy { it.startMillis } }
+}
+
+private fun JsonObject.epgString(key: String) =
+    (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotBlank)

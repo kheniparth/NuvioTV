@@ -6,7 +6,7 @@ import com.nuvio.tv.livetv.data.LiveTvCatalog
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.XmltvGuide
-import com.nuvio.tv.livetv.data.nowNext
+import com.nuvio.tv.livetv.data.nowNextFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -177,7 +177,7 @@ internal fun buildChannelRows(
         ) {
             return@mapNotNull null
         }
-        val epg = guide.nowNext(channel.epgId.orEmpty(), nowMillis)
+        val epg = guide.nowNextFor(channel.id, channel.epgId, nowMillis)
         ChannelRow(
             channel = channel,
             nowTitle = epg.now?.title,

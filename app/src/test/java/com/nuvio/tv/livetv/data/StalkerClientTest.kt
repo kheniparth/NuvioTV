@@ -45,6 +45,30 @@ class StalkerClientTest {
     }
 
     @Test
+    fun `relative portal logo resolves and get_epg_info uses period 48`() = runTest {
+        MockWebServer().use { server ->
+            val settings = settings(server)
+            server.enqueue(MockResponse().setBody("""{"js":{"token":"tok"}}"""))
+            server.enqueue(MockResponse().setBody("""{"js":{"data":[]}}"""))
+            server.enqueue(MockResponse().setBody("""{"js":{"data":[{"id":"9","name":"BBC","cmd":"http://cdn/bbc.ts","logo":"/misc/logos/9.png"}]}}"""))
+            server.enqueue(MockResponse().setBody("""{"js":{"data":[]}}"""))
+            server.enqueue(MockResponse().setBody("""{"js":{"data":{"9":[{"name":"News","start_timestamp":"100","stop_timestamp":"200","descr":"Now"}]}}}"""))
+            val client = stalker()
+
+            val channel = client.channels(settings).single()
+            val epg = client.epg(settings)
+            val requests = List(5) { server.takeRequest() }
+
+            assertEquals(server.url("/misc/logos/9.png").toString(), channel.logoUrl)
+            assertEquals("get_epg_info", requests.last().requestUrl?.queryParameter("action"))
+            assertEquals("48", requests.last().requestUrl?.queryParameter("period"))
+            assertEquals("News", epg["stalker:9"]?.single()?.title)
+            assertEquals(100_000L, epg["stalker:9"]?.single()?.startMillis)
+            assertEquals("Now", epg["stalker:9"]?.single()?.description)
+        }
+    }
+
+    @Test
     fun `401 and an expired token each handshake once and retry create_link`() = runTest {
         MockWebServer().use { server ->
             val settings = settings(server)

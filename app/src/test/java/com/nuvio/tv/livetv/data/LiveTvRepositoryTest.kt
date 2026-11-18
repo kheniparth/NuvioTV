@@ -176,6 +176,61 @@ class LiveTvRepositoryTest {
     }
 
     @Test
+    fun `catalog loads playlist xtream and stalker guides when none is saved`() = runTest {
+        val start = 1_794_916_800_000L
+        val provider = FakeSources(
+            LiveTvSources(
+                playlists = listOf(LiveTvPlaylist("m3u", "Mine", LiveTvPlaylistType.Url, "https://a.m3u")),
+                xtream = xtreamSettings,
+                stalker = stalkerSettings,
+            )
+        )
+        coEvery { http.getText("https://a.m3u") } returns """
+            #EXTM3U url-tvg="https://m3u/epg.xml"
+            #EXTINF:-1 tvg-id="bbc1" tvg-logo="http://logo/bbc.png",BBC
+            http://stream/bbc.ts
+        """.trimIndent()
+        coEvery { http.getBytes("https://m3u/epg.xml", any()) } returns programme("bbc1", "From M3U").toByteArray()
+        coEvery { http.getBytes(xtreamEpgUrl(xtreamSettings), any()) } returns programme("m1", "From Xtream").toByteArray()
+        coEvery { xtream.liveChannels(xtreamSettings) } returns listOf(
+            LiveTvChannel(
+                id = "xtream:5",
+                name = "Match",
+                streamUrl = "http://panel/live/5.ts",
+                logoUrl = "http://logo/match.png",
+                epgId = "m1",
+            ),
+        )
+        coEvery { stalker.channels(stalkerSettings) } returns listOf(
+            LiveTvChannel(
+                id = "stalker:9",
+                name = "Portal",
+                streamUrl = "http://cdn/bbc.ts",
+                logoUrl = "http://logo/portal.png",
+                epgId = "bbc",
+            ),
+        )
+        coEvery { stalker.epg(stalkerSettings) } returns mapOf(
+            "stalker:9" to listOf(LiveTvEpgProgram("From portal", start, start + 3_600_000L)),
+        )
+        val store = mockk<LiveTvSettingsDataStore> {
+            every { settings } returns MutableStateFlow(StoredSettings())
+        }
+        val catalog = LiveTvRepository(provider, http, xtream, stalker, LiveTvCache(tempDir()), store)
+            .loadCatalog(start)
+
+        assertEquals("http://logo/bbc.png", catalog.channels.first { it.name == "BBC" }.logoUrl)
+        assertEquals("http://logo/match.png", catalog.channels.first { it.name == "Match" }.logoUrl)
+        assertEquals("http://logo/portal.png", catalog.channels.first { it.name == "Portal" }.logoUrl)
+        assertEquals("From M3U", catalog.guide.nowNext("bbc1", start).now?.title)
+        assertEquals("From Xtream", catalog.guide.nowNext("m1", start).now?.title)
+        assertEquals("From portal", catalog.guide.nowNextFor("stalker:9", "bbc", start).now?.title)
+        coVerify(exactly = 1) { http.getText("https://a.m3u") }
+        coVerify(exactly = 1) { stalker.epg(stalkerSettings) }
+        coVerify(exactly = 2) { http.getBytes(any(), any()) }
+    }
+
+    @Test
     fun `favourite toggle is stored and recents go newest first`() = runTest {
         val stored = MutableStateFlow(StoredSettings(favoriteChannelIds = listOf("one")))
         val store = mockk<LiveTvSettingsDataStore> {
@@ -229,6 +284,10 @@ class LiveTvRepositoryTest {
                 <title>On now</title>
               </programme>
             </tv>
+        """.trimIndent()
+
+        fun programme(channel: String, title: String) = """
+            <tv><programme start="20261117120000 +0000" stop="20261117130000 +0000" channel="$channel"><title>$title</title></programme></tv>
         """.trimIndent()
     }
 }
