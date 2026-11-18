@@ -1,6 +1,7 @@
 package com.nuvio.tv.livetv.ui
 
 import android.content.Context
+import android.util.Log
 import android.view.ViewGroup
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -43,11 +44,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -59,6 +61,8 @@ import coil3.compose.AsyncImage
 import com.nuvio.tv.R
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.ui.screens.player.PlayerMediaSourceFactory
+import com.nuvio.tv.ui.screens.player.PlayerPlaybackNetworking
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -76,9 +80,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 
 internal const val PREVIEW_FOCUS_DELAY_MILLIS = 1_000L
+internal const val PREVIEW_FOCUS_LOSS_GRACE_MILLIS = 400L
+internal const val LIVE_TV_PREVIEW_LOG_TAG = "LiveTvPreview"
 private const val SCREEN_CHANGE_RELEASE_DELAY_MILLIS = 750L
 
 /** Waits out focus changes so fast scrolling never starts a preview. */
@@ -89,25 +94,83 @@ internal class LiveTvPreviewDebounce(
     private val onStop: () -> Unit,
 ) {
     private var focused: LiveTvChannel? = null
+    private var playingId: String? = null
     private var job: Job? = null
+    private var stopJob: Job? = null
 
     fun focus(channel: LiveTvChannel?) {
-        if (channel?.id == focused?.id) return
+        if (channel == null) {
+            job?.cancel()
+            job = null
+            if (playingId == null) {
+                focused = null
+                stopJob?.cancel()
+                onStop()
+                return
+            }
+            // Focus and scroll flicker for a frame after the surface appears. Wait before dropping the stream.
+            if (stopJob?.isActive == true) return
+            val leaving = playingId
+            stopJob = scope.launch {
+                delay(PREVIEW_FOCUS_LOSS_GRACE_MILLIS)
+                if (playingId == leaving) {
+                    focused = null
+                    playingId = null
+                    onStop()
+                }
+            }
+            return
+        }
+        stopJob?.cancel()
+        stopJob = null
+        if (channel.id == focused?.id && (playingId == channel.id || job?.isActive == true)) return
+        val switched = channel.id != focused?.id
         focused = channel
         job?.cancel()
-        onStop()
-        if (channel == null) return
+        if (switched) {
+            playingId = null
+            onStop()
+        }
+        val target = channel
         job = scope.launch {
             delay(delayMillis)
-            onStart(channel)
+            playingId = target.id
+            onStart(target)
         }
+    }
+
+    /** Scrolling must not open a stream, and must not cut one that already started. */
+    fun scroll() {
+        if (playingId != null) return
+        job?.cancel()
+        job = null
     }
 
     fun cancel() {
         focused = null
+        playingId = null
         job?.cancel()
+        job = null
+        stopJob?.cancel()
+        stopJob = null
         onStop()
     }
+}
+
+internal enum class PreviewSourceKind { Hls, Ts, Progressive }
+
+/** Same HLS / MPEG-TS / progressive choice the full player makes for a channel URL. */
+internal fun previewSourceKind(mimeType: String?): PreviewSourceKind = when (mimeType) {
+    MimeTypes.APPLICATION_M3U8 -> PreviewSourceKind.Hls
+    MimeTypes.VIDEO_MP2T -> PreviewSourceKind.Ts
+    else -> PreviewSourceKind.Progressive
+}
+
+/** Extension from the URL when it has one; otherwise the same network probe the full player uses after a parse error. */
+internal suspend fun previewMimeType(url: String, headers: Map<String, String>): String? {
+    val inferred = PlayerMediaSourceFactory.inferMimeType(url, filename = null)
+    if (inferred != null) return inferred
+    return PlayerMediaSourceFactory.probeNetworkMimeType(url, headers)
 }
 
 /**
@@ -118,7 +181,6 @@ internal class LiveTvPreviewDebounce(
 @Singleton
 class LiveTvPreviewPlayer @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val client: OkHttpClient,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var player: ExoPlayer? = null
@@ -149,12 +211,20 @@ class LiveTvPreviewPlayer @Inject constructor(
         }
     }
 
-    fun play(url: String, headers: Map<String, String>) {
+    fun play(url: String, headers: Map<String, String>, mimeType: String? = null) {
         val exo = player ?: createPlayer().also { player = it }
-        val mediaSource = DefaultMediaSourceFactory(
-            OkHttpDataSource.Factory(client).setDefaultRequestProperties(headers)
-        ).createMediaSource(MediaItem.fromUri(url))
+        val dataSource = PlayerPlaybackNetworking.createHttpDataSourceFactory(headers)
+        val item = MediaItem.Builder().setUri(url).apply { mimeType?.let(::setMimeType) }.build()
+        val mediaSource = when (previewSourceKind(mimeType)) {
+            PreviewSourceKind.Hls -> HlsMediaSource.Factory(dataSource)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(item)
+            PreviewSourceKind.Ts, PreviewSourceKind.Progressive ->
+                DefaultMediaSourceFactory(dataSource).createMediaSource(item)
+        }
+        exo.playWhenReady = false
         exo.stop()
+        exo.clearMediaItems()
         exo.setMediaSource(mediaSource)
         exo.prepare()
         exo.playWhenReady = true
@@ -174,7 +244,8 @@ class LiveTvPreviewPlayer @Inject constructor(
         _error.value = null
     }
 
-    fun fail(message: String) {
+    fun fail(message: String, cause: Throwable? = null) {
+        Log.e(LIVE_TV_PREVIEW_LOG_TAG, message, cause)
         stop()
         _error.value = message
     }
@@ -199,7 +270,10 @@ class LiveTvPreviewPlayer @Inject constructor(
                 volume = 0f
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
-                        this@LiveTvPreviewPlayer.fail(error.message ?: error.javaClass.simpleName)
+                        val detail = error.cause?.message?.takeIf { it.isNotBlank() }
+                        val headline = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
+                        val message = if (detail != null && detail != headline) "$headline: $detail" else headline
+                        this@LiveTvPreviewPlayer.fail(message, error)
                     }
                 })
             }
@@ -219,7 +293,7 @@ class LiveTvPreviewViewModel @Inject constructor(
 
     fun onFocus(channel: LiveTvChannel?) = debounce.focus(channel)
 
-    fun onScroll() = debounce.cancel()
+    fun onScroll() = debounce.scroll()
 
     /** The account allows one stream: stop the preview before the full-screen player opens. */
     fun stopForPlayback() = debounce.cancel()
@@ -241,9 +315,18 @@ class LiveTvPreviewViewModel @Inject constructor(
         currentCoroutineContext().ensureActive()
         if (playable.url.isBlank()) {
             player.fail("No stream URL")
-        } else {
-            player.play(playable.url, playable.headers)
+            return
         }
+        val mimeType = try {
+            previewMimeType(playable.url, playable.headers)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            player.fail(error.message ?: error.javaClass.simpleName)
+            return
+        }
+        currentCoroutineContext().ensureActive()
+        player.play(playable.url, playable.headers, mimeType)
     }
 }
 
@@ -373,6 +456,7 @@ private fun PreviewSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
     }
     AndroidView(
         factory = { playerView },
+        update = { view -> view.player = player },
         modifier = modifier.focusProperties { canFocus = false },
     )
 }
