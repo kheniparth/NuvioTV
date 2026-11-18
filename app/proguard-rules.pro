@@ -18,6 +18,10 @@
 # Keep TypeToken generic signatures (used in AddonConfigServer/RepositoryConfigServer)
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
+# Gson uses these field names. R8 full mode renames plain <fields>; !transient keeps the names.
+-keepclassmembers class com.nuvio.tv.livetv.data.** {
+    !transient <fields>;
+}
 
 # ── Retrofit ───────────────────────────────────────────────────────────────────
 # Keep generic signatures for Retrofit service methods
