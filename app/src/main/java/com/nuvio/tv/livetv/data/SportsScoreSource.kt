@@ -48,8 +48,6 @@ data class SportsGame(
     val broadcasts: List<String>,
 )
 
-internal data class EspnScoreboardDates(val range: String, val days: List<String>)
-
 /** ESPN site API. Soccer slugs and the big US leagues are fixed; cricket/eng.1 and cricket/ipl 404. */
 internal val EspnSportsScoreSource = SportsScoreSource(
     name = "ESPN",
@@ -72,14 +70,16 @@ internal val EspnSportsScoreSource = SportsScoreSource(
 )
 
 class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
-    suspend fun games(nowMillis: Long = System.currentTimeMillis()): List<SportsGame> {
-        val source = EspnSportsScoreSource
-        val dates = espnScoreboardDates(nowMillis)
+    suspend fun games(nowMillis: Long = System.currentTimeMillis()): List<SportsGame> =
+        games(EspnSportsScoreSource, nowMillis)
+
+    internal suspend fun games(source: SportsScoreSource, nowMillis: Long): List<SportsGame> {
+        val days = espnScoreboardDates(nowMillis)
         val leagues = source.leagues + cricketLeagues(source)
         val results = coroutineScope {
             leagues.map { league ->
                 async {
-                    runCatching { fetchLeague(source, league, dates) }.onFailure { error ->
+                    runCatching { fetchLeague(source, league, days) }.onFailure { error ->
                         if (error is CancellationException) throw error
                         Log.w(TAG, "ESPN ${league.id} failed", error)
                     }
@@ -87,7 +87,7 @@ class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
             }.awaitAll()
         }
         if (results.isNotEmpty() && results.all { it.isFailure }) {
-            throw results.first().exceptionOrNull() ?: IllegalStateException("No scores")
+            throw IllegalStateException("Couldn't load scores")
         }
         return visibleSportsGames(results.flatMap { it.getOrNull().orEmpty() }, nowMillis)
     }
@@ -105,31 +105,21 @@ class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
     private suspend fun fetchLeague(
         source: SportsScoreSource,
         league: SportsLeague,
-        dates: EspnScoreboardDates,
-    ): List<SportsGame> {
+        days: List<String>,
+    ): List<SportsGame> = coroutineScope {
         val base = "${source.scoreboardBase}/${league.path}/scoreboard"
-        suspend fun attempt(url: String): List<SportsGame>? = try {
-            parseEspnScoreboard(http.getText(url, ESPN_HEADERS), league)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            Log.w(TAG, "ESPN ${league.id} $url", error)
-            null
-        }
-
-        attempt("$base?dates=${dates.range}&limit=1000")?.takeIf { it.isNotEmpty() }?.let { return it }
-        val perDay = mutableListOf<SportsGame>()
-        var anyDaySucceeded = false
-        for (day in dates.days) {
-            attempt("$base?dates=$day")?.let { events ->
-                anyDaySucceeded = true
-                perDay += events
+        val results = days.map { day ->
+            async {
+                runCatching {
+                    parseEspnScoreboard(http.getText("$base?dates=$day", ESPN_HEADERS), league)
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "ESPN ${league.id} $day", error)
+                }
             }
-        }
-        if (perDay.isNotEmpty()) return perDay
-        attempt(base)?.let { return it }
-        if (anyDaySucceeded) return emptyList()
-        error("No scoreboard for ${league.label}")
+        }.awaitAll()
+        if (results.all { it.isFailure }) error("No scoreboard for ${league.label}")
+        results.flatMap { it.getOrNull().orEmpty() }.distinctBy { it.id }
     }
 
     private companion object {
@@ -137,13 +127,13 @@ class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
     }
 }
 
-internal fun espnScoreboardDates(nowMillis: Long): EspnScoreboardDates {
+/** Today plus the next two days, in ESPN's US date. A date range is rejected with HTTP 400. */
+internal fun espnScoreboardDates(nowMillis: Long): List<String> {
     val today = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.of("America/New_York")).toLocalDate()
-    val days = (-1..2).map { offset ->
+    return (0..2).map { offset ->
         val date = today.plusDays(offset.toLong())
         "%04d%02d%02d".format(date.year, date.monthValue, date.dayOfMonth)
     }
-    return EspnScoreboardDates(range = "${days.first()}-${days.last()}", days = days)
 }
 
 /** Live games, plus upcoming ones that start within 48 hours. */
