@@ -1,6 +1,8 @@
 package com.nuvio.tv.ui.screens.player
 
 import com.nuvio.tv.data.repository.AddonEventDispatcher
+import com.nuvio.tv.livetv.ui.LiveTvPlaybackSession
+import com.nuvio.tv.livetv.ui.applyResolvedLiveChannel
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -104,6 +106,7 @@ class PlayerViewModel @Inject constructor(
     private val serverStreams: com.nuvio.tv.data.mediaserver.ServerStreams,
     partyRepository: com.nuvio.tv.core.party.PartyRepository,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    livePlayback: LiveTvPlaybackSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -111,6 +114,7 @@ class PlayerViewModel @Inject constructor(
         // Release trailer player codec resources so the full-screen player can
         // claim hardware decoders without contention (prevents black screen).
         trailerPlayerPool.yield()
+        savedStateHandle.applyResolvedLiveChannel(livePlayback)
     }
 
     internal val controller = PlayerRuntimeController(

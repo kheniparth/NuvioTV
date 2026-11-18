@@ -1180,6 +1180,7 @@ private fun PlaybackNavHost(
                 },
                 onOpenPartyMedia = ::openPartyMedia,
                 onSwitchLiveChannel = { request ->
+                    val playerId = navController.currentDestination?.id
                     navController.navigate(
                         Screen.Player.createRoute(
                             streamUrl = request.streamUrl,
@@ -1190,8 +1191,9 @@ private fun PlaybackNavHost(
                             poster = request.logoUrl,
                         )
                     ) {
-                        popUpTo(Screen.Player.route) { inclusive = true }
-                        launchSingleTop = true
+                        if (playerId != null) {
+                            popUpTo(playerId) { inclusive = true }
+                        }
                     }
                 },
                 onPlaybackErrorBack = {

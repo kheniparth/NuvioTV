@@ -123,6 +123,7 @@ class ChannelsViewModel @Inject constructor(
 
     fun play(channel: LiveTvChannel) {
         if (playing) return
+        playback.clearPending()
         viewModelScope.launch {
             playing = true
             try {
