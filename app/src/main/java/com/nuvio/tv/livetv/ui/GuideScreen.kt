@@ -256,11 +256,7 @@ private fun GuideContent(
                                 onChannelClick(channel)
                             },
                             onFocusChanged = { focused ->
-                                previewChannel = when {
-                                    focused -> channel
-                                    previewChannel?.id == channel.id -> null
-                                    else -> previewChannel
-                                }
+                                if (focused) previewChannel = channel
                             },
                         )
                     }

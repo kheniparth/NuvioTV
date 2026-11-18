@@ -178,11 +178,7 @@ fun SportsScreen(
                                 }
                             },
                             onChannelFocus = { channel, focused ->
-                                previewChannel = when {
-                                    focused -> channel
-                                    previewChannel?.id == channel.id -> null
-                                    else -> previewChannel
-                                }
+                                if (focused) previewChannel = channel
                             },
                         )
                     }
