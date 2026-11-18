@@ -1521,6 +1521,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
 
+                        // A live zap can race the provider's one-stream limit; one short retry recovers it.
+                        if (tryLiveTvForbiddenRetry(error)) return
+
                         // Error handlers: DV codec failures, audio decoder issues, codec state errors.
                         if (error.isDolbyVisionDecoderFailure() && !isMapDv7ToHevcActiveForCurrentPlayback) {
                             // Manual Convert-to-DV8.1 mode 2 failed to decode: try

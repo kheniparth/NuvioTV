@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,8 +86,23 @@ fun ChannelsScreen(
         LiveTvCategoryEntry(category.key(), category.label(allLabel, favouritesLabel, recentsLabel))
     }
     val selectedKey = state.selectedCategory.key()
+    val playback = rememberLiveTvPlayback()
     val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
-    val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: state.rows.firstOrNull()?.channel?.id
+    val restoreId = playback.currentId?.takeIf { id -> state.rows.any { it.channel.id == id } }
+        ?: focus.restoreKey(selectedKey, visibleKeys)
+        ?: state.rows.firstOrNull()?.channel?.id
+
+    // Coming back from the player (normal exit or an error) returns focus to the channel that was playing.
+    var restoredFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(state.rows) {
+        if (restoredFocus) return@LaunchedEffect
+        val id = playback.currentId ?: return@LaunchedEffect
+        val index = state.rows.indexOfFirst { it.channel.id == id }
+        if (index < 0) return@LaunchedEffect
+        listState.scrollToItem(index)
+        repeat(2) { withFrameNanos { } }
+        restoredFocus = focus.focusListItem()
+    }
 
     Row(
         modifier = Modifier

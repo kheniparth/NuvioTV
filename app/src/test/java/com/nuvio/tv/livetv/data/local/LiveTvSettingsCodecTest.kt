@@ -81,4 +81,12 @@ class LiveTvSettingsCodecTest {
             normalizeLiveTvFavoriteChannelIds(listOf(" b ", "", "a", "b"))
         )
     }
+
+    @Test
+    fun sourceHostDropsCredentialsPathAndPort() {
+        assertEquals("addon.example.com", liveTvSourceHost("http://addon.example.com/get.php?username=u&password=secret"))
+        assertEquals("host.tv", liveTvSourceHost("https://user:pass@host.tv:8443/list.m3u"))
+        assertEquals(null, liveTvSourceHost("/sdcard/tv.m3u"))
+        assertEquals(null, liveTvSourceHost(""))
+    }
 }

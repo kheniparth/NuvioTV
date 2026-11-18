@@ -19,6 +19,7 @@ import org.json.JSONObject
 @Singleton
 class LiveTvPlaybackSession @Inject constructor(
     private val repository: LiveTvRepository,
+    private val previewPlayer: LiveTvPreviewPlayer,
 ) {
     var channels: List<LiveTvChannel> = emptyList()
         private set
@@ -50,8 +51,9 @@ class LiveTvPlaybackSession @Inject constructor(
 
     fun inCategory(): List<LiveTvChannel> = channelsInCategory(channels, favoriteIds, category, recentIds)
 
-    fun adjacent(next: Boolean): LiveTvChannel? {
-        val id = currentId ?: return null
+    /** [fromId] lets a burst of presses walk from the pending target instead of the playing channel. */
+    fun adjacent(next: Boolean, fromId: String? = currentId): LiveTvChannel? {
+        val id = fromId ?: return null
         return adjacentChannel(channels, favoriteIds, category, id, next, recentIds)
     }
 
@@ -67,6 +69,8 @@ class LiveTvPlaybackSession @Inject constructor(
 
     suspend fun playable(channel: LiveTvChannel): LiveTvPlayRequest {
         pending = null
+        // The provider allows one stream, so the preview must be fully closed before this one opens.
+        previewPlayer.stop()
         val resolved = repository.resolvePlayableUrl(channel)
         if (resolved.url.isBlank()) error("No stream URL")
         repository.recordRecent(channel.id)
