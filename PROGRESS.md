@@ -31,14 +31,17 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   bootstrap on fresh installs (PR #36).
 
 ## Current state (2026-11-18)
-- TV fork `dev` has the full Live TV feature. No open PRs.
+- TV fork `dev` has the full Live TV feature. Open: PR #48 (#45 category column), PR #49 (#47 preview flashes
+  and disappears), #50 (release builds lose Live TV settings: R8 renames Gson fields).
+- The owner's TV runs the release build (`com.nuvio.tv`, signed in, no Live TV sources yet) because debug builds
+  lag (59% janky frames vs 24% release, 12% official). Release builds can't run `livetv-bootstrap.sh` (no run-as).
 - Desktop fork: no Live TV work yet; it only tracks upstream.
 
 ## Next steps
 1. #45 (labelled `implement`, the factory will pick it up): categories as the first left column on every Live TV
    screen (Channels, Guide, Sports, On Demand), one shared `LiveTvCategoryColumn`. Owner's layout preference.
-2. Build one APK with everything merged and test it on the emulator, then on the Chromecast (batch the fixes:
-   one combined build and test per set).
+2. Build one release APK (`:app:assembleFullRelease`) with everything merged and test it on the emulator only
+   (batch the fixes: one combined build and test per set). Queue Chromecast tests until the owner lifts the hold.
 3. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
 4. Desktop fork: port Enhanced's `features/livetv/` (see "NuvioDesktop fork" in LIVE_TV_PORT_PLAN.md).
@@ -71,7 +74,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 - UI is rewritten with NuvioTV's TV components; Enhanced's phone UI and `tvFocus*` hacks are not ported.
 - Stalker content inside normal title streams goes through the stalker bridge Stremio addon, not Live TV.
 - Never change native player library versions or upstream workflows. Never touch `NuvioMedia/*` on GitHub.
-- Real-device testing on the Chromecast is allowed (hold lifted 2026-11-17 evening).
+- No testing on the real TV / Chromecast (owner hold from 2026-11-18 02:07 UTC, until the owner says otherwise).
+  Use the emulator and queue TV tests as "Owner tests" in the PR handoff.
 
 ## Gotchas
 - The Stalker MAC allows one stream at a time: a second device gets HTTP 403.
