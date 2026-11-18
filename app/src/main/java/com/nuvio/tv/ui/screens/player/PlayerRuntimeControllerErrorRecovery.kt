@@ -16,6 +16,44 @@ private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
 private const val RETRY_DELAY_MS = 1_500L
 private const val STABLE_PROGRESS_RESET_DELAY_MS = 5_000L
+private const val LIVE_TV_FORBIDDEN_RETRY_DELAY_MS = 1_000L
+
+/** A live zap can hit the provider's one-stream limit as a 403 while the previous stream closes. */
+internal fun isLiveTvForbiddenRetry(contentType: String?, httpStatus: Int?): Boolean =
+    contentType.equals("channel", ignoreCase = true) && httpStatus == 403
+
+/**
+ * Retries a live channel once after a 403 so a zap that raced the old stream closing recovers.
+ * Returns true when a retry was scheduled.
+ */
+internal fun PlayerRuntimeController.tryLiveTvForbiddenRetry(error: PlaybackException): Boolean {
+    if (hasRetriedLiveTvForbidden) return false
+    if (!isLiveTvForbiddenRetry(contentType, error.findInvalidResponseCodeException()?.responseCode)) return false
+    hasRetriedLiveTvForbidden = true
+    val paused = userPausedManually
+
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "Live channel HTTP 403 — retrying once after ${LIVE_TV_FORBIDDEN_RETRY_DELAY_MS}ms"
+    )
+
+    errorRetryJob?.cancel()
+    errorRetryJob = scope.launch {
+        _uiState.update {
+            it.copy(
+                error = null,
+                isBuffering = true,
+                showLoadingOverlay = it.loadingOverlayEnabled,
+                loadingMessage = context.getString(R.string.player_loading_buffering),
+                showPauseOverlay = false
+            )
+        }
+        delay(LIVE_TV_FORBIDDEN_RETRY_DELAY_MS)
+        releasePlayer(flushPlaybackState = false)
+        reinitializeCurrentStream(startPaused = paused)
+    }
+    return true
+}
 
 internal fun PlayerRuntimeController.showRecoveryOverlay() {
     _uiState.update { state ->

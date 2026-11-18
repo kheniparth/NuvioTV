@@ -61,6 +61,7 @@ import com.nuvio.tv.livetv.data.local.LiveTvPlaylist
 import com.nuvio.tv.livetv.data.local.LiveTvPlaylistType
 import com.nuvio.tv.livetv.data.local.LiveTvStalkerSettings
 import com.nuvio.tv.livetv.data.local.LiveTvXtreamSettings
+import com.nuvio.tv.livetv.data.local.liveTvSourceHost
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.util.UUID
@@ -102,7 +103,13 @@ fun LiveTvSettingsContent(
                         itemsIndexed(state.playlists, key = { _, it -> "playlist_${it.id}" }) { index, playlist ->
                             SettingsActionRow(
                                 title = playlist.name,
-                                subtitle = playlist.source,
+                                subtitle = sourceSubtitle(
+                                    playlist.source,
+                                    stringResource(
+                                        if (playlist.type == LiveTvPlaylistType.Url) R.string.livetv_type_url
+                                        else R.string.livetv_type_file
+                                    ),
+                                ),
                                 value = disabledLabel(playlist.isEnabled),
                                 leadingIcon = Icons.Default.PlaylistPlay,
                                 onClick = { editor = LiveTvEditor.Playlist(playlist) },
@@ -137,7 +144,10 @@ fun LiveTvSettingsContent(
                                 } else {
                                     stringResource(R.string.livetv_xtream_account)
                                 },
-                                subtitle = state.xtream.serverUrl.ifBlank { null },
+                                subtitle = sourceSubtitle(
+                                    state.xtream.serverUrl,
+                                    stringResource(R.string.livetv_xtream_section),
+                                ),
                                 value = if (state.xtream.serverUrl.isBlank()) null else disabledLabel(state.xtream.isEnabled),
                                 leadingIcon = Icons.Default.LiveTv,
                                 onClick = { editor = LiveTvEditor.Xtream },
@@ -154,7 +164,10 @@ fun LiveTvSettingsContent(
                                 } else {
                                     stringResource(R.string.livetv_stalker_portal)
                                 },
-                                subtitle = state.stalker.portalUrl.ifBlank { null },
+                                subtitle = sourceSubtitle(
+                                    state.stalker.portalUrl,
+                                    stringResource(R.string.livetv_stalker_section),
+                                ),
                                 value = if (state.stalker.portalUrl.isBlank()) null else disabledLabel(state.stalker.isEnabled),
                                 leadingIcon = Icons.Default.LiveTv,
                                 onClick = { editor = LiveTvEditor.Stalker },
@@ -167,7 +180,10 @@ fun LiveTvSettingsContent(
                         items(state.epgSources, key = { "epg_${it.id}" }) { source ->
                             SettingsActionRow(
                                 title = source.name,
-                                subtitle = source.url,
+                                subtitle = sourceSubtitle(
+                                    source.url,
+                                    stringResource(R.string.livetv_epg_section),
+                                ),
                                 value = disabledLabel(source.isEnabled),
                                 leadingIcon = Icons.Default.LiveTv,
                                 onClick = { editor = LiveTvEditor.Epg(source) },
@@ -268,6 +284,7 @@ private fun PlaylistEditorDialog(
             },
             value = source,
             onValueChange = { source = it },
+            isSecret = type == LiveTvPlaylistType.Url,
         )
         SettingsToggleRow(
             title = stringResource(R.string.livetv_enabled),
@@ -334,7 +351,7 @@ private fun XtreamEditorDialog(
                 label = stringResource(R.string.livetv_field_password),
                 value = password,
                 onValueChange = { password = it },
-                isPassword = true,
+                isSecret = true,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -410,7 +427,7 @@ private fun StalkerEditorDialog(
             label = stringResource(R.string.livetv_field_password),
             value = password,
             onValueChange = { password = it },
-            isPassword = true,
+            isSecret = true,
         )
         SettingsToggleRow(
             title = stringResource(R.string.livetv_enabled),
@@ -464,7 +481,7 @@ private fun EpgEditorDialog(
         suppressFirstKeyUp = false,
     ) {
         LiveTvTextField(stringResource(R.string.livetv_field_name), name, { name = it })
-        LiveTvTextField(stringResource(R.string.livetv_field_url), url, { url = it })
+        LiveTvTextField(stringResource(R.string.livetv_field_url), url, { url = it }, isSecret = true)
         SettingsToggleRow(
             title = stringResource(R.string.livetv_enabled),
             subtitle = null,
@@ -497,7 +514,7 @@ private fun LiveTvTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    isPassword: Boolean = false,
+    isSecret: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -548,7 +565,8 @@ private fun LiveTvTextField(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioTheme.colors.TextPrimary),
-                visualTransformation = if (isPassword) {
+                // Hidden while the user is elsewhere, readable while editing the field.
+                visualTransformation = if (isSecret && !focused) {
                     PasswordVisualTransformation()
                 } else {
                     VisualTransformation.None
@@ -604,3 +622,8 @@ private fun RemoveButton(visible: Boolean, onClick: () -> Unit) {
 @Composable
 private fun disabledLabel(enabled: Boolean): String? =
     if (enabled) null else stringResource(R.string.livetv_disabled)
+
+/** Row subtitle with the host only: the stored URL can carry a private token. */
+@Composable
+private fun sourceSubtitle(url: String, type: String): String? =
+    if (url.isBlank()) null else listOfNotNull(liveTvSourceHost(url), type).joinToString(" · ")

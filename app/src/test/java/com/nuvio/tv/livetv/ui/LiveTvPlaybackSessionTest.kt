@@ -32,7 +32,7 @@ class LiveTvPlaybackSessionTest {
             )
             coEvery { recordRecent(any()) } returns Unit
         }
-        val session = LiveTvPlaybackSession(repository)
+        val session = LiveTvPlaybackSession(repository, mockk(relaxed = true))
         session.arm(listOf(cnn, next), emptySet(), ChannelCategory.All, cnn.id)
 
         val request = session.playable(session.adjacent(next = true)!!)

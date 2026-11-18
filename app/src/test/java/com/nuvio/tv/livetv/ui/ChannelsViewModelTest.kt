@@ -64,7 +64,7 @@ class ChannelsViewModelTest {
     @Test
     fun `favourite toggle updates the list and the favourites category`() = runTest {
         val repository = repository(catalog())
-        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
         runCurrent()
 
         viewModel.toggleFavorite("c1")
@@ -87,7 +87,7 @@ class ChannelsViewModelTest {
         val repository = repository(catalog())
         coEvery { repository.resolvePlayableUrl(any()) } returns
             LiveTvPlayable("http://play", mapOf("User-Agent" to "VLC"))
-        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
         val plays = mutableListOf<LiveTvPlayRequest>()
         val collect = launch { viewModel.playRequests.collect { plays += it } }
         runCurrent()
@@ -108,7 +108,7 @@ class ChannelsViewModelTest {
     fun `a failed play does not record a recent`() = runTest {
         val repository = repository(catalog())
         coEvery { repository.resolvePlayableUrl(any()) } throws IllegalStateException("no link")
-        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
+        val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
         runCurrent()
 
         viewModel.play(catalog().channels.first())
@@ -163,7 +163,7 @@ class ChannelsViewModelTest {
 
     private fun viewModel(catalog: LiveTvCatalog): ChannelsViewModel {
         val repository = repository(catalog)
-        return ChannelsViewModel(repository, LiveTvPlaybackSession(repository))
+        return ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
     }
 
     private fun repository(catalog: LiveTvCatalog): LiveTvRepository = mockk {

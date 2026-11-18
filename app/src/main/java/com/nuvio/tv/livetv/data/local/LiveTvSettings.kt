@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.net.URI
 
 /** M3U playlist. `type` is `Url` or `LocalFile`, matching Enhanced `LiveTvPlaylistType`. */
 data class LiveTvPlaylist(
@@ -55,6 +56,10 @@ data class LiveTvSettings(
             (xtream.serverUrl.isNotBlank() && xtream.username.isNotBlank() && xtream.password.isNotBlank()) ||
             (stalker.portalUrl.isNotBlank() && stalker.macAddress.isNotBlank())
 }
+
+/** Host of a source URL, without credentials, path or query, so a token never shows in a list row. */
+internal fun liveTvSourceHost(url: String): String? =
+    runCatching { URI(url.trim()).host }.getOrNull()?.takeIf { it.isNotBlank() }
 
 internal const val LIVE_TV_MAX_RECENT_CHANNELS = 50
 

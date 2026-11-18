@@ -14,6 +14,7 @@ import com.nuvio.tv.ui.theme.NuvioMotion
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.ui.LiveTvChannelsPanel
 import com.nuvio.tv.livetv.ui.LiveTvPlayRequest
+import com.nuvio.tv.livetv.ui.LiveTvZapDebounce
 import com.nuvio.tv.livetv.ui.rememberLiveTvPlayback
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.accentBrush
@@ -243,22 +244,29 @@ fun PlayerScreen(
     val livePlayback = rememberLiveTvPlayback()
     val liveScope = rememberCoroutineScope()
     var showLiveChannels by remember { mutableStateOf(false) }
-    var liveSwitching by remember { mutableStateOf(false) }
     val onSwitchLiveChannelState by rememberUpdatedState(onSwitchLiveChannel)
-    val requestLiveChannel = { channel: LiveTvChannel ->
-        if (channel.id != livePlayback.currentId && !liveSwitching) {
-            liveSwitching = true
-            liveScope.launch {
-                try {
-                    val request = livePlayback.playable(channel)
-                    livePlayback.markCurrent(channel.id)
-                    onSwitchLiveChannelState(request)
-                } catch (cancel: CancellationException) {
-                    throw cancel
-                } catch (_: Exception) {
-                    liveSwitching = false
-                }
+    // The pending target, so repeated presses keep walking the list while only the last one opens.
+    var zapCursorId by remember { mutableStateOf(livePlayback.currentId) }
+    val liveZapDebounce = remember(liveScope, viewModel, livePlayback) {
+        LiveTvZapDebounce(scope = liveScope) { channel ->
+            try {
+                // Release the playing stream before the next one opens: the source allows one stream.
+                viewModel.stopAndRelease()
+                val request = livePlayback.playable(channel)
+                livePlayback.markCurrent(channel.id)
+                onSwitchLiveChannelState(request)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
             }
+        }
+    }
+    val requestLiveChannel = { channel: LiveTvChannel ->
+        zapCursorId = channel.id
+        if (channel.id != livePlayback.currentId) {
+            liveZapDebounce.request(channel)
+        } else {
+            liveZapDebounce.cancel()
         }
     }
     val liveZap = uiState.contentType == "channel" && livePlayback.inCategory().isNotEmpty()
@@ -946,7 +954,7 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
                                 if (!uiState.showControls && liveZap) {
-                                    livePlayback.adjacent(next = true)?.let(requestLiveChannel)
+                                    livePlayback.adjacent(next = true, fromId = zapCursorId)?.let(requestLiveChannel)
                                 } else if (!uiState.showControls) {
                                     viewModel.onEvent(PlayerEvent.OnToggleControls)
                                 } else {
@@ -973,7 +981,7 @@ fun PlayerScreen(
                             }
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
                             if (!uiState.showControls && liveZap) {
-                                livePlayback.adjacent(next = false)?.let(requestLiveChannel)
+                                livePlayback.adjacent(next = false, fromId = zapCursorId)?.let(requestLiveChannel)
                                 true
                             } else if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnToggleControls)
@@ -1010,7 +1018,7 @@ fun PlayerScreen(
                             if (liveZap) {
                                 val next = keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
                                     keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_CHANNEL_UP
-                                livePlayback.adjacent(next)?.let(requestLiveChannel)
+                                livePlayback.adjacent(next, fromId = zapCursorId)?.let(requestLiveChannel)
                                 true
                             } else if (uiState.chapters.isEmpty()) {
                                 false

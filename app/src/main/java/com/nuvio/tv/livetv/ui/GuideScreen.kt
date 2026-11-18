@@ -399,7 +399,7 @@ private fun GuideChannelCell(
                 text = channel.name,
                 style = MaterialTheme.typography.labelMedium,
                 color = NuvioTheme.colors.TextPrimary,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
