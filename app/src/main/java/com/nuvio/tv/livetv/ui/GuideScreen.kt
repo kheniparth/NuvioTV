@@ -247,11 +247,7 @@ private fun GuideContent(
                             },
                             onFocusChanged = { focused ->
                                 if (focused) focus.onListItemFocused(selectedKey, channel.id)
-                                previewChannel = when {
-                                    focused -> channel
-                                    previewChannel?.id == channel.id -> null
-                                    else -> previewChannel
-                                }
+                                if (focused) previewChannel = channel
                             },
                         )
                     }

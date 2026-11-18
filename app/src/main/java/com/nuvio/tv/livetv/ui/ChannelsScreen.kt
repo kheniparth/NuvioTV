@@ -142,11 +142,7 @@ fun ChannelsScreen(
                             onToggleFavorite = { viewModel.toggleFavorite(row.channel.id) },
                             onFocusChanged = { focused ->
                                 if (focused) focus.onListItemFocused(selectedKey, row.channel.id)
-                                previewRow = when {
-                                    focused -> row
-                                    previewRow?.channel?.id == row.channel.id -> null
-                                    else -> previewRow
-                                }
+                                if (focused) previewRow = row
                             },
                         )
                     }
