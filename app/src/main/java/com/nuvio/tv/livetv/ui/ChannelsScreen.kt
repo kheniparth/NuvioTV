@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -75,6 +76,17 @@ fun ChannelsScreen(
 
     var previewRow by remember { mutableStateOf<ChannelRow?>(null) }
     val listState = rememberLazyListState()
+    val focus = rememberLiveTvColumnFocus()
+    LiveTvColumnBack(focus)
+    val allLabel = stringResource(R.string.livetv_category_all)
+    val favouritesLabel = stringResource(R.string.livetv_category_favourites)
+    val recentsLabel = stringResource(R.string.livetv_category_recents)
+    val entries = state.categories.map { category ->
+        LiveTvCategoryEntry(category.key(), category.label(allLabel, favouritesLabel, recentsLabel))
+    }
+    val selectedKey = state.selectedCategory.key()
+    val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
+    val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: state.rows.firstOrNull()?.channel?.id
 
     Row(
         modifier = Modifier
@@ -82,10 +94,18 @@ fun ChannelsScreen(
             .padding(NuvioTheme.spacing.lg),
         horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
     ) {
+        LiveTvCategoryColumn(
+            entries = entries,
+            selectedKey = selectedKey,
+            onSelect = { key -> state.categories.firstOrNull { it.key() == key }?.let(viewModel::selectCategory) },
+            focus = focus,
+            modifier = Modifier.weight(0.2f),
+        )
         Column(
             modifier = Modifier
-                .weight(0.6f)
-                .fillMaxHeight(),
+                .weight(0.45f)
+                .fillMaxHeight()
+                .liveTvReturnToCategories(focus),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
         ) {
             Text(
@@ -94,15 +114,6 @@ fun ChannelsScreen(
                 color = NuvioTheme.colors.TextPrimary,
             )
             ChannelSearchField(state.query, viewModel::setQuery)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-                items(state.categories, key = { it.key() }) { category ->
-                    CategoryChip(
-                        label = category.label(),
-                        selected = category == state.selectedCategory,
-                        onClick = { viewModel.selectCategory(category) },
-                    )
-                }
-            }
             state.error?.let { message ->
                 Text(text = message, style = MaterialTheme.typography.bodyMedium, color = NuvioTheme.colors.Primary)
             }
@@ -126,9 +137,11 @@ fun ChannelsScreen(
                     items(state.rows, key = { it.channel.id }) { row ->
                         ChannelLine(
                             row = row,
+                            listRequester = focus.listRequester.takeIf { row.channel.id == restoreId },
                             onPlay = { viewModel.play(row.channel) },
                             onToggleFavorite = { viewModel.toggleFavorite(row.channel.id) },
                             onFocusChanged = { focused ->
+                                if (focused) focus.onListItemFocused(selectedKey, row.channel.id)
                                 previewRow = when {
                                     focused -> row
                                     previewRow?.channel?.id == row.channel.id -> null
@@ -145,7 +158,7 @@ fun ChannelsScreen(
             nowTitle = previewRow?.nowTitle,
             nextTitle = previewRow?.nextTitle,
             scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier.weight(0.4f),
+            modifier = Modifier.weight(0.35f),
             viewModel = previewViewModel,
         )
     }
@@ -209,43 +222,9 @@ private fun ChannelSearchField(value: String, onValueChange: (String) -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) NuvioTheme.colors.BackgroundCard else NuvioTheme.colors.BackgroundElevated,
-            focusedContainerColor = NuvioTheme.colors.BackgroundCard,
-        ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border(
-                border = BorderStroke(
-                    NuvioTheme.spacing.hairline,
-                    if (selected) NuvioTheme.colors.Primary else NuvioTheme.colors.Border,
-                ),
-                shape = shape,
-            ),
-            focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                shape = shape,
-            ),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = NuvioTheme.colors.TextPrimary,
-        )
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 private fun ChannelLine(
     row: ChannelRow,
+    listRequester: FocusRequester?,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
@@ -260,6 +239,7 @@ private fun ChannelLine(
             onClick = onPlay,
             modifier = Modifier
                 .weight(1f)
+                .then(if (listRequester != null) Modifier.focusRequester(listRequester) else Modifier)
                 .onFocusChanged { onFocusChanged(it.isFocused) },
             shape = ClickableSurfaceDefaults.shape(shape),
             colors = ClickableSurfaceDefaults.colors(
@@ -317,15 +297,16 @@ private fun ChannelLine(
     }
 }
 
-@Composable
-private fun ChannelCategory.label(): String = when (this) {
-    ChannelCategory.All -> stringResource(R.string.livetv_category_all)
-    ChannelCategory.Favourites -> stringResource(R.string.livetv_category_favourites)
+private fun ChannelCategory.label(all: String, favourites: String, recents: String): String = when (this) {
+    ChannelCategory.All -> all
+    ChannelCategory.Favourites -> favourites
+    ChannelCategory.Recents -> recents
     is ChannelCategory.Group -> name
 }
 
 private fun ChannelCategory.key(): String = when (this) {
     ChannelCategory.All -> "all"
     ChannelCategory.Favourites -> "favourites"
+    ChannelCategory.Recents -> "recents"
     is ChannelCategory.Group -> "group:$name"
 }

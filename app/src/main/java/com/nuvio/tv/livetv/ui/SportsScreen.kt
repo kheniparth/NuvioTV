@@ -1,7 +1,6 @@
 package com.nuvio.tv.livetv.ui
 
 import android.util.Log
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,8 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 internal const val SPORTS_LOAD_TIMEOUT_MILLIS = 10_000L
+private const val SPORTS_ALL_KEY = "all"
 
 data class SportsRow(val game: SportsGame, val channels: List<LiveTvChannel>)
 
@@ -120,7 +123,6 @@ fun SportsScreen(
     onPlay: (url: String, headers: Map<String, String>, title: String) -> Unit,
     viewModel: SportsViewModel = hiltViewModel(),
 ) {
-    BackHandler { onBackPress() }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var playing by remember { mutableStateOf(false) }
@@ -128,6 +130,26 @@ fun SportsScreen(
     var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
     val listState = rememberLazyListState()
     val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
+    val focus = rememberLiveTvColumnFocus()
+    LiveTvColumnBack(focus, onLeave = onBackPress)
+    val allLabel = stringResource(R.string.livetv_category_all)
+    var selectedLeague by rememberSaveable { mutableStateOf(SPORTS_ALL_KEY) }
+    val leagues = remember(state.rows, allLabel) {
+        listOf(LiveTvCategoryEntry(SPORTS_ALL_KEY, allLabel)) +
+            state.rows.distinctBy { it.game.leagueId }
+                .map { LiveTvCategoryEntry(it.game.leagueId, it.game.leagueLabel) }
+    }
+    val games = remember(state.rows, selectedLeague) {
+        if (selectedLeague == SPORTS_ALL_KEY) state.rows else state.rows.filter { it.game.leagueId == selectedLeague }
+    }
+    val visibleGameKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
+    val visibleChannelIds = games
+        .filter { "${it.game.leagueId}:${it.game.id}" in visibleGameKeys }
+        .flatMap { row -> row.channels.map { it.id } }
+    val restoreChannelId = focus.restoreKey(selectedLeague, visibleChannelIds)
+        ?: games.firstNotNullOfOrNull { it.channels.firstOrNull()?.id }
+    val restoreGameKey = games.firstOrNull { row -> row.channels.any { it.id == restoreChannelId } }
+        ?.let { "${it.game.leagueId}:${it.game.id}" }
 
     Row(
         modifier = Modifier
@@ -135,8 +157,18 @@ fun SportsScreen(
             .padding(horizontal = NuvioTheme.spacing.xxl, vertical = NuvioTheme.spacing.xl),
         horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl),
     ) {
+        LiveTvCategoryColumn(
+            entries = leagues,
+            selectedKey = selectedLeague,
+            onSelect = { selectedLeague = it },
+            focus = focus,
+            modifier = Modifier.weight(0.2f),
+        )
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(0.8f)
+                .fillMaxHeight()
+                .liveTvReturnToCategories(focus),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -150,17 +182,20 @@ fun SportsScreen(
             }
             when {
                 state.loading -> Text(text = stringResource(R.string.livetv_sports_loading), color = NuvioTheme.colors.TextSecondary)
-                state.rows.isEmpty() && state.error == null ->
+                games.isEmpty() && state.error == null ->
                     Text(text = stringResource(R.string.livetv_sports_empty), color = NuvioTheme.colors.TextSecondary)
                 else -> LazyColumn(
                     modifier = Modifier.weight(1f),
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    items(state.rows, key = { "${it.game.leagueId}:${it.game.id}" }) { row ->
+                    items(games, key = { "${it.game.leagueId}:${it.game.id}" }) { row ->
                         SportsGameBlock(
                             row = row,
                             nowMillis = state.nowMillis,
+                            restoreChannelId = restoreChannelId,
+                            restoreFocus = "${row.game.leagueId}:${row.game.id}" == restoreGameKey,
+                            listRequester = focus.listRequester,
                             onChannel = { channel ->
                                 if (playing) return@SportsGameBlock
                                 previewViewModel.stopForPlayback()
@@ -178,6 +213,7 @@ fun SportsScreen(
                                 }
                             },
                             onChannelFocus = { channel, focused ->
+                                if (focused) focus.onListItemFocused(selectedLeague, channel.id)
                                 previewChannel = when {
                                     focused -> channel
                                     previewChannel?.id == channel.id -> null
@@ -203,6 +239,9 @@ fun SportsScreen(
 private fun SportsGameBlock(
     row: SportsRow,
     nowMillis: Long,
+    restoreChannelId: String?,
+    restoreFocus: Boolean,
+    listRequester: FocusRequester,
     onChannel: (LiveTvChannel) -> Unit,
     onChannelFocus: (LiveTvChannel, Boolean) -> Unit,
 ) {
@@ -255,7 +294,15 @@ private fun SportsGameBlock(
                 row.channels.forEach { channel ->
                     Button(
                         onClick = { onChannel(channel) },
-                        modifier = Modifier.onFocusChanged { onChannelFocus(channel, it.isFocused) },
+                        modifier = Modifier
+                            .then(
+                                if (restoreFocus && channel.id == restoreChannelId) {
+                                    Modifier.focusRequester(listRequester)
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .onFocusChanged { onChannelFocus(channel, it.isFocused) },
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundCard,
                             contentColor = NuvioTheme.colors.TextPrimary,

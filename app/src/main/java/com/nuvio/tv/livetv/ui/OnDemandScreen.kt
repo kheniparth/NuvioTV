@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -67,7 +69,6 @@ import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
-import com.nuvio.tv.livetv.data.LiveTvVodCategory
 import com.nuvio.tv.livetv.data.LiveTvVodEpisode
 import com.nuvio.tv.livetv.data.LiveTvVodItem
 import com.nuvio.tv.livetv.data.LiveTvVodKind
@@ -79,6 +80,10 @@ import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.dpadRepeatThrottle
 import kotlinx.coroutines.launch
+
+private const val VOD_ALL = "all"
+private const val VOD_FAVORITES = "favorites"
+private const val VOD_CATEGORY = "cat:"
 
 @Composable
 fun OnDemandScreen(
@@ -95,13 +100,17 @@ fun OnDemandScreen(
     var selectedSeries by remember { mutableStateOf<LiveTvVodItem?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val firstChipFocus = remember { FocusRequester() }
+    val focus = rememberLiveTvColumnFocus()
+    val gridState = rememberLazyGridState()
 
-    LaunchedEffect(Unit) { runCatching { firstChipFocus.requestFocus() } }
     LaunchedEffect(selectedSeries?.id) { selectedSeries?.let(viewModel::loadEpisodes) }
 
     BackHandler {
-        if (selectedSeries != null) selectedSeries = null else onBackPress()
+        when {
+            selectedSeries != null -> selectedSeries = null
+            focus.inList -> focus.focusCategory()
+            else -> onBackPress()
+        }
     }
 
     fun startPlayback(block: suspend () -> LiveTvVodPlayback?) {
@@ -119,12 +128,77 @@ fun OnDemandScreen(
         filterLiveTvVodItems(catalog.items, selectedCategoryId, searchQuery)
             .filter { item -> !favoritesOnly || item.id in uiState.favoriteIds }
     }
+    val selectedKey = when {
+        favoritesOnly -> VOD_FAVORITES
+        selectedCategoryId == null -> VOD_ALL
+        else -> VOD_CATEGORY + selectedCategoryId
+    }
+    val entries = listOf(
+        LiveTvCategoryEntry(VOD_ALL, stringResource(R.string.livetv_on_demand_all)),
+        LiveTvCategoryEntry(VOD_FAVORITES, stringResource(R.string.livetv_on_demand_favorites)),
+    ) + catalog.categories.map { LiveTvCategoryEntry(VOD_CATEGORY + it.id, it.name) }
+    val visibleKeys = gridState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
+    val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: visibleItems.firstOrNull()?.id
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = NuvioTheme.spacing.xxxl, vertical = NuvioTheme.spacing.xl),
+            .padding(horizontal = NuvioTheme.spacing.xl, vertical = NuvioTheme.spacing.xl),
+        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
     ) {
+        LiveTvCategoryColumn(
+            entries = entries,
+            selectedKey = selectedKey,
+            onSelect = { key ->
+                selectedSeries = null
+                when (key) {
+                    VOD_ALL -> {
+                        favoritesOnly = false
+                        selectedCategoryId = null
+                    }
+                    VOD_FAVORITES -> {
+                        favoritesOnly = true
+                        selectedCategoryId = null
+                    }
+                    else -> {
+                        favoritesOnly = false
+                        selectedCategoryId = key.removePrefix(VOD_CATEGORY)
+                    }
+                }
+            },
+            focus = focus,
+            modifier = Modifier.weight(0.2f),
+            header = {
+                Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
+                    SourceStatusFilterChip(
+                        name = stringResource(R.string.livetv_on_demand_movies),
+                        isSelected = uiState.kind == LiveTvVodKind.Movies,
+                        onClick = {
+                            selectedSeries = null
+                            selectedCategoryId = null
+                            favoritesOnly = false
+                            viewModel.selectKind(LiveTvVodKind.Movies)
+                        },
+                    )
+                    SourceStatusFilterChip(
+                        name = stringResource(R.string.livetv_on_demand_series),
+                        isSelected = uiState.kind == LiveTvVodKind.Series,
+                        onClick = {
+                            selectedSeries = null
+                            selectedCategoryId = null
+                            favoritesOnly = false
+                            viewModel.selectKind(LiveTvVodKind.Series)
+                        },
+                    )
+                }
+            },
+        )
+        Column(
+            modifier = Modifier
+                .weight(0.8f)
+                .fillMaxHeight()
+                .liveTvReturnToCategories(focus),
+        ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(R.string.livetv_on_demand_title),
@@ -133,53 +207,6 @@ fun OnDemandScreen(
             )
             Spacer(modifier = Modifier.weight(1f))
             OnDemandSearchField(query = searchQuery, onQueryChange = { searchQuery = it })
-        }
-
-        Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-            SourceStatusFilterChip(
-                name = stringResource(R.string.livetv_on_demand_movies),
-                isSelected = uiState.kind == LiveTvVodKind.Movies,
-                onClick = {
-                    selectedSeries = null
-                    selectedCategoryId = null
-                    favoritesOnly = false
-                    viewModel.selectKind(LiveTvVodKind.Movies)
-                },
-                modifier = Modifier.focusRequester(firstChipFocus),
-            )
-            SourceStatusFilterChip(
-                name = stringResource(R.string.livetv_on_demand_series),
-                isSelected = uiState.kind == LiveTvVodKind.Series,
-                onClick = {
-                    selectedSeries = null
-                    selectedCategoryId = null
-                    favoritesOnly = false
-                    viewModel.selectKind(LiveTvVodKind.Series)
-                },
-            )
-            SourceStatusFilterChip(
-                name = stringResource(R.string.livetv_on_demand_favorites),
-                isSelected = favoritesOnly,
-                onClick = {
-                    favoritesOnly = !favoritesOnly
-                    selectedCategoryId = null
-                },
-            )
-        }
-
-        if (selectedSeries == null && catalog.categories.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
-            CategoryRow(
-                categories = catalog.categories,
-                selectedCategoryId = selectedCategoryId,
-                showAll = !favoritesOnly,
-                onSelected = { category ->
-                    favoritesOnly = false
-                    selectedCategoryId = category
-                },
-            )
         }
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
@@ -227,6 +254,7 @@ fun OnDemandScreen(
 
                 else -> LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 150.dp),
+                    state = gridState,
                     modifier = Modifier
                         .fillMaxSize()
                         .dpadRepeatThrottle(),
@@ -239,6 +267,8 @@ fun OnDemandScreen(
                             GridContentCard(
                                 item = item.toMetaPreview(),
                                 showReleaseInfo = item.year != null,
+                                focusRequester = focus.listRequester.takeIf { item.id == restoreId },
+                                onFocused = { focus.onListItemFocused(selectedKey, item.id) },
                                 onLongPress = { viewModel.toggleFavorite(item.id) },
                                 onClick = {
                                     if (item.kind == LiveTvVodKind.Series) {
@@ -279,30 +309,6 @@ fun OnDemandScreen(
                 color = NuvioTheme.colors.TextTertiary,
             )
         }
-    }
-}
-
-@Composable
-private fun CategoryRow(
-    categories: List<LiveTvVodCategory>,
-    selectedCategoryId: String?,
-    showAll: Boolean,
-    onSelected: (String?) -> Unit,
-) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
-        item(key = "all") {
-            SourceStatusFilterChip(
-                name = stringResource(R.string.livetv_on_demand_all),
-                isSelected = showAll && selectedCategoryId == null,
-                onClick = { onSelected(null) },
-            )
-        }
-        items(categories, key = { it.id }) { category ->
-            SourceStatusFilterChip(
-                name = category.name,
-                isSelected = selectedCategoryId == category.id,
-                onClick = { onSelected(category.id) },
-            )
         }
     }
 }

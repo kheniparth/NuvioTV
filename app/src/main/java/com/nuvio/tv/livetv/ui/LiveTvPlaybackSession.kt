@@ -26,6 +26,8 @@ class LiveTvPlaybackSession @Inject constructor(
         private set
     var category: ChannelCategory = ChannelCategory.All
         private set
+    var recentIds: List<String> = emptyList()
+        private set
     var currentId: String? = null
         private set
 
@@ -37,18 +39,20 @@ class LiveTvPlaybackSession @Inject constructor(
         favoriteIds: Set<String>,
         category: ChannelCategory,
         currentId: String,
+        recentIds: List<String> = emptyList(),
     ) {
         this.channels = channels
         this.favoriteIds = favoriteIds
         this.category = category
+        this.recentIds = recentIds
         this.currentId = currentId
     }
 
-    fun inCategory(): List<LiveTvChannel> = channelsInCategory(channels, favoriteIds, category)
+    fun inCategory(): List<LiveTvChannel> = channelsInCategory(channels, favoriteIds, category, recentIds)
 
     fun adjacent(next: Boolean): LiveTvChannel? {
         val id = currentId ?: return null
-        return adjacentChannel(channels, favoriteIds, category, id, next)
+        return adjacentChannel(channels, favoriteIds, category, id, next, recentIds)
     }
 
     fun markCurrent(id: String) {

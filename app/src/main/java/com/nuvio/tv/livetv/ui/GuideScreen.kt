@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -67,7 +66,6 @@ import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.SimpleDateFormat
@@ -82,6 +80,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val GUIDE_ALL_KEY = "all"
 private val GuideChannelColumnWidth = 168.dp
 private val GuideRowHeight = 76.dp
 private val GuideRulerHeight = 30.dp
@@ -176,17 +175,17 @@ private fun GuideContent(
     val nowMillis = rememberGuideNowMillis()
     val windowStart = remember(state.nowMillis) { guideWindowStart(state.nowMillis) }
     val timelineScroll = rememberScrollState()
-    val firstFocus = remember { FocusRequester() }
     val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
-
-    LaunchedEffect(state.loading, state.channels) {
-        if (!state.loading && state.channels.isNotEmpty()) {
-            runCatching { firstFocus.requestFocus() }
-        }
-    }
+    val focus = rememberLiveTvColumnFocus()
+    LiveTvColumnBack(focus)
+    val selectedKey = state.selectedCategory ?: GUIDE_ALL_KEY
+    val entries = listOf(LiveTvCategoryEntry(GUIDE_ALL_KEY, stringResource(R.string.livetv_guide_all))) +
+        state.categories.map { LiveTvCategoryEntry(it, it) }
 
     var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
     val listState = rememberLazyListState()
+    val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
+    val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: channels.firstOrNull()?.id
     val previewPrograms = previewChannel?.let { state.programs[it.id] }.orEmpty()
     val nowTitle = previewPrograms.firstOrNull { it.startMillis <= nowMillis && nowMillis < it.endMillis }?.title
     val nextTitle = previewPrograms.firstOrNull { it.startMillis > nowMillis }?.title
@@ -197,33 +196,24 @@ private fun GuideContent(
             .padding(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        LiveTvCategoryColumn(
+            entries = entries,
+            selectedKey = selectedKey,
+            onSelect = { key -> onCategorySelected(key.takeUnless { it == GUIDE_ALL_KEY }) },
+            focus = focus,
+            modifier = Modifier.weight(0.2f),
+        )
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(0.8f)
+                .fillMaxHeight()
+                .liveTvReturnToCategories(focus),
         ) {
             Text(
                 text = stringResource(R.string.livetv_guide_title),
                 style = MaterialTheme.typography.headlineMedium,
                 color = NuvioTheme.colors.TextPrimary,
             )
-            Spacer(Modifier.height(12.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    SourceStatusFilterChip(
-                        name = stringResource(R.string.livetv_guide_all),
-                        isSelected = state.selectedCategory == null,
-                        onClick = { onCategorySelected(null) },
-                        onFocusSelect = { onCategorySelected(null) },
-                    )
-                }
-                items(state.categories, key = { it }) { category ->
-                    SourceStatusFilterChip(
-                        name = category,
-                        isSelected = state.selectedCategory == category,
-                        onClick = { onCategorySelected(category) },
-                        onFocusSelect = { onCategorySelected(category) },
-                    )
-                }
-            }
             Spacer(Modifier.height(12.dp))
             GuideTimeRuler(windowStart = windowStart, nowMillis = nowMillis, scrollState = timelineScroll)
             when {
@@ -250,12 +240,13 @@ private fun GuideContent(
                             windowStart = windowStart,
                             nowMillis = nowMillis,
                             scrollState = timelineScroll,
-                            focusRequester = firstFocus.takeIf { channel.id == channels.first().id },
+                            focusRequester = focus.listRequester.takeIf { channel.id == restoreId },
                             onClick = {
                                 previewViewModel.stopForPlayback()
                                 onChannelClick(channel)
                             },
                             onFocusChanged = { focused ->
+                                if (focused) focus.onListItemFocused(selectedKey, channel.id)
                                 previewChannel = when {
                                     focused -> channel
                                     previewChannel?.id == channel.id -> null
