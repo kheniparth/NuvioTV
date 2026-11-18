@@ -68,3 +68,14 @@ data class LiveTvPlaylist(
     val source: String,
     val isEnabled: Boolean = true,
 )
+
+/** Absolute http(s) logo. A portal path is resolved against [pageUrl]; anything else is dropped. */
+internal fun resolveLogoUrl(raw: String?, pageUrl: String): String? {
+    val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val resolved = if (value.startsWith("http://", ignoreCase = true) || value.startsWith("https://", ignoreCase = true)) {
+        value
+    } else {
+        runCatching { java.net.URI(pageUrl).resolve(value).toString() }.getOrNull() ?: return null
+    }
+    return resolved.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+}

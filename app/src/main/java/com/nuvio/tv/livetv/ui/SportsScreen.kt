@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.ui
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -47,10 +48,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+
+internal const val SPORTS_LOAD_TIMEOUT_MILLIS = 10_000L
 
 data class SportsRow(val game: SportsGame, val channels: List<LiveTvChannel>)
 
@@ -62,31 +70,47 @@ data class SportsUiState(
 )
 
 @HiltViewModel
-class SportsViewModel @Inject constructor(
+class SportsViewModel(
     private val scores: SportsScoreboard,
     private val repository: LiveTvRepository,
+    private val loadDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
+    @Inject
+    constructor(scores: SportsScoreboard, repository: LiveTvRepository) :
+        this(scores, repository, Dispatchers.Default)
+
     private val _uiState = MutableStateFlow(SportsUiState())
     val uiState: StateFlow<SportsUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            runCatching {
-                val games = scores.games(now)
-                val channels = repository.channels()
-                games.map { game -> SportsRow(game, matchSportsChannels(game, channels)) }
-            }.fold(
-                onSuccess = { rows -> _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now) },
-                onFailure = { error ->
-                    if (error is CancellationException) throw error
-                    _uiState.value = SportsUiState(loading = false, error = error.message, nowMillis = now)
-                },
-            )
+            try {
+                val rows = withTimeout(SPORTS_LOAD_TIMEOUT_MILLIS) {
+                    withContext(loadDispatcher) {
+                        val games = scores.games(now)
+                        val channels = repository.channels()
+                        games.map { game -> SportsRow(game, matchSportsChannels(game, channels)) }
+                    }
+                }
+                _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now)
+            } catch (timeout: TimeoutCancellationException) {
+                Log.w(TAG, "Sports scores timed out after ${SPORTS_LOAD_TIMEOUT_MILLIS}ms")
+                _uiState.value = SportsUiState(loading = false, nowMillis = now)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "Sports scores failed", error)
+                _uiState.value = SportsUiState(loading = false, error = error.message, nowMillis = now)
+            }
         }
     }
 
     suspend fun playable(channel: LiveTvChannel) = repository.resolvePlayableUrl(channel)
+
+    private companion object {
+        const val TAG = "SportsViewModel"
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
