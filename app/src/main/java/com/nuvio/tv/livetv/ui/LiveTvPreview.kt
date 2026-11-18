@@ -4,20 +4,34 @@ import android.content.Context
 import android.view.ViewGroup
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,8 +52,14 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import com.nuvio.tv.R
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -75,10 +95,8 @@ internal class LiveTvPreviewDebounce(
         if (channel?.id == focused?.id) return
         focused = channel
         job?.cancel()
-        if (channel == null) {
-            onStop()
-            return
-        }
+        onStop()
+        if (channel == null) return
         job = scope.launch {
             delay(delayMillis)
             onStart(channel)
@@ -108,6 +126,8 @@ class LiveTvPreviewPlayer @Inject constructor(
     private var releaseJob: Job? = null
     private val _previewing = MutableStateFlow(false)
     val previewing: StateFlow<Boolean> = _previewing.asStateFlow()
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     internal val exoPlayer: ExoPlayer? get() = player
 
@@ -138,6 +158,7 @@ class LiveTvPreviewPlayer @Inject constructor(
         exo.setMediaSource(mediaSource)
         exo.prepare()
         exo.playWhenReady = true
+        _error.value = null
         _previewing.value = true
     }
 
@@ -150,6 +171,12 @@ class LiveTvPreviewPlayer @Inject constructor(
             }
         }
         _previewing.value = false
+        _error.value = null
+    }
+
+    fun fail(message: String) {
+        stop()
+        _error.value = message
     }
 
     fun release() {
@@ -172,7 +199,7 @@ class LiveTvPreviewPlayer @Inject constructor(
                 volume = 0f
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
-                        this@LiveTvPreviewPlayer.stop()
+                        this@LiveTvPreviewPlayer.fail(error.message ?: error.javaClass.simpleName)
                     }
                 })
             }
@@ -194,6 +221,9 @@ class LiveTvPreviewViewModel @Inject constructor(
 
     fun onScroll() = debounce.cancel()
 
+    /** The account allows one stream: stop the preview before the full-screen player opens. */
+    fun stopForPlayback() = debounce.cancel()
+
     fun onAppBackgrounded() {
         debounce.cancel()
         player.release()
@@ -205,22 +235,36 @@ class LiveTvPreviewViewModel @Inject constructor(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
+            player.fail(error.message ?: error.javaClass.simpleName)
             return
         }
         currentCoroutineContext().ensureActive()
-        if (playable.url.isNotBlank()) player.play(playable.url, playable.headers)
+        if (playable.url.isBlank()) {
+            player.fail("No stream URL")
+        } else {
+            player.play(playable.url, playable.headers)
+        }
     }
 }
 
+internal val LiveTvPreviewPanelWidth = 320.dp
+
+/**
+ * Always-visible preview beside the list: the focused channel's name at once, then muted video.
+ * Not focusable, so the D-pad stays in the list.
+ */
 @Composable
-fun LiveTvPreviewOverlay(
+fun LiveTvPreviewPanel(
     focusedChannel: LiveTvChannel?,
     scrollInProgress: Boolean,
     modifier: Modifier = Modifier,
+    nowTitle: String? = null,
+    nextTitle: String? = null,
     viewModel: LiveTvPreviewViewModel = hiltViewModel(),
 ) {
     val player = viewModel.player
     val previewing by player.previewing.collectAsStateWithLifecycle()
+    val error by player.error.collectAsStateWithLifecycle()
     val activity = LocalActivity.current as? LifecycleOwner
     val latestFocus by rememberUpdatedState(focusedChannel)
 
@@ -249,16 +293,67 @@ fun LiveTvPreviewOverlay(
         if (scrollInProgress) viewModel.onScroll() else viewModel.onFocus(focusedChannel)
     }
 
-    Box(modifier = modifier) {
-        if (previewing) {
-            viewModel.player.exoPlayer?.let { exo -> PreviewSurface(exo) }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            val exo = player.exoPlayer
+            if (previewing && exo != null) {
+                PreviewSurface(exo, Modifier.fillMaxSize())
+            } else {
+                val message = error
+                    ?: if (focusedChannel != null) stringResource(R.string.livetv_preview_starting) else null
+                if (message != null) {
+                    Text(
+                        text = message,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (error != null) NuvioTheme.colors.Error else NuvioTheme.colors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        focusedChannel?.let { channel ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ChannelLogo(channel)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = channel.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioTheme.colors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val guide = guideLine(nowTitle, nextTitle)
+                    if (guide != null) {
+                        Text(
+                            text = guide,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun PreviewSurface(player: ExoPlayer) {
+private fun PreviewSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val playerView = remember(player) {
         PlayerView(context).apply {
@@ -278,10 +373,43 @@ private fun PreviewSurface(player: ExoPlayer) {
     }
     AndroidView(
         factory = { playerView },
-        modifier = Modifier
-            .size(width = 320.dp, height = 180.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.Black)
-            .focusProperties { canFocus = false },
+        modifier = modifier.focusProperties { canFocus = false },
     )
+}
+
+@Composable
+internal fun ChannelLogo(channel: LiveTvChannel) {
+    val shape = RoundedCornerShape(8.dp)
+    if (channel.logoUrl.isNullOrBlank()) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(shape)
+                .background(NuvioTheme.colors.BackgroundElevated),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Default.LiveTv,
+                contentDescription = null,
+                tint = NuvioTheme.colors.TextSecondary,
+            )
+        }
+    } else {
+        AsyncImage(
+            model = channel.logoUrl,
+            contentDescription = null,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(shape),
+            contentScale = ContentScale.Crop,
+        )
+    }
+}
+
+@Composable
+internal fun guideLine(nowTitle: String?, nextTitle: String?): String? = when {
+    nowTitle != null && nextTitle != null -> stringResource(R.string.livetv_now_next, nowTitle, nextTitle)
+    nowTitle != null -> stringResource(R.string.livetv_now, nowTitle)
+    nextTitle != null -> stringResource(R.string.livetv_next, nextTitle)
+    else -> null
 }
