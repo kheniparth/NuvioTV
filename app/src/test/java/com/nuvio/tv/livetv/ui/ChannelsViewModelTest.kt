@@ -134,7 +134,31 @@ class ChannelsViewModelTest {
         assertEquals("c1", adjacentChannel(channels, favorites, news, "missing", next = true)?.id)
 
         assertEquals("c2", adjacentChannel(channels, favorites, ChannelCategory.Favourites, "c2", next = true)?.id)
+        assertEquals(
+            "c1",
+            adjacentChannel(channels, favorites, ChannelCategory.Recents, "c3", next = true, recentIds = listOf("c3", "c1"))?.id,
+        )
         assertNull(adjacentChannel(emptyList(), emptySet(), ChannelCategory.All, "c1", next = true))
+    }
+
+    @Test
+    fun `recents category lists newest first`() = runTest {
+        val viewModel = viewModel(catalog().copy(recentIds = listOf("c3", "c1")))
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                ChannelCategory.All,
+                ChannelCategory.Favourites,
+                ChannelCategory.Recents,
+                ChannelCategory.Group("News"),
+                ChannelCategory.Group("Sport"),
+            ),
+            viewModel.uiState.value.categories,
+        )
+        viewModel.selectCategory(ChannelCategory.Recents)
+        runCurrent()
+        assertEquals(listOf("Other", "News One"), names(viewModel))
     }
 
     private fun viewModel(catalog: LiveTvCatalog): ChannelsViewModel {

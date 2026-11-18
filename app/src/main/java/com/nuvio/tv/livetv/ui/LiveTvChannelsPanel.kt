@@ -51,6 +51,7 @@ fun LiveTvChannelsPanel(
     val title = when (val category = playback.category) {
         ChannelCategory.All -> stringResource(R.string.livetv_category_all)
         ChannelCategory.Favourites -> stringResource(R.string.livetv_category_favourites)
+        ChannelCategory.Recents -> stringResource(R.string.livetv_category_recents)
         is ChannelCategory.Group -> category.name
     }
     val listState = rememberLazyListState()

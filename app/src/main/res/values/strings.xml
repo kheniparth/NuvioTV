@@ -3551,6 +3551,7 @@
     <string name="livetv_search">Search channels</string>
     <string name="livetv_category_all">All</string>
     <string name="livetv_category_favourites">Favourites</string>
+    <string name="livetv_category_recents">Recents</string>
     <string name="livetv_loading">Loading channels…</string>
     <string name="livetv_empty">No channels</string>
     <string name="livetv_now_next">%1$s  ·  Next: %2$s</string>

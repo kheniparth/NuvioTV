@@ -22,6 +22,7 @@ data class LiveTvCatalog(
     val channels: List<LiveTvChannel> = emptyList(),
     val guide: XmltvGuide = XmltvGuide(),
     val favoriteIds: Set<String> = emptySet(),
+    val recentIds: List<String> = emptyList(),
 )
 
 @Singleton
@@ -75,11 +76,15 @@ class LiveTvRepository @Inject constructor(
         return loaded.channels
     }
 
-    suspend fun loadCatalog(nowMillis: Long): LiveTvCatalog = LiveTvCatalog(
-        channels = channels(),
-        guide = XmltvGuide(programsByTvgId = guide(nowMillis)),
-        favoriteIds = settingsStore.settings.first().favoriteChannelIds.toSet(),
-    )
+    suspend fun loadCatalog(nowMillis: Long): LiveTvCatalog {
+        val settings = settingsStore.settings.first()
+        return LiveTvCatalog(
+            channels = channels(),
+            guide = XmltvGuide(programsByTvgId = guide(nowMillis)),
+            favoriteIds = settings.favoriteChannelIds.toSet(),
+            recentIds = settings.recentChannelIds,
+        )
+    }
 
     fun categories(channels: List<LiveTvChannel>): List<String> =
         channels.mapNotNull { it.group?.trim()?.takeIf(String::isNotEmpty) }.distinct().sorted()
