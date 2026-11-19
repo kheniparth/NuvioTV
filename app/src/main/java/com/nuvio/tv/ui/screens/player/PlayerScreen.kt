@@ -15,6 +15,7 @@ import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.ui.LiveTvChannelsPanel
 import com.nuvio.tv.livetv.ui.LiveTvPlayRequest
 import com.nuvio.tv.livetv.ui.LiveTvZapDebounce
+import com.nuvio.tv.livetv.ui.liveZapMovesNext
 import com.nuvio.tv.livetv.ui.rememberLiveTvPlayback
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.accentBrush
@@ -954,7 +955,7 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
                                 if (!uiState.showControls && liveZap) {
-                                    livePlayback.adjacent(next = true, fromId = zapCursorId)?.let(requestLiveChannel)
+                                    livePlayback.adjacent(next = liveZapMovesNext(KeyEvent.KEYCODE_DPAD_UP), fromId = zapCursorId)?.let(requestLiveChannel)
                                 } else if (!uiState.showControls) {
                                     viewModel.onEvent(PlayerEvent.OnToggleControls)
                                 } else {
@@ -981,7 +982,7 @@ fun PlayerScreen(
                             }
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
                             if (!uiState.showControls && liveZap) {
-                                livePlayback.adjacent(next = false, fromId = zapCursorId)?.let(requestLiveChannel)
+                                livePlayback.adjacent(next = liveZapMovesNext(KeyEvent.KEYCODE_DPAD_DOWN), fromId = zapCursorId)?.let(requestLiveChannel)
                                 true
                             } else if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnToggleControls)
@@ -1016,8 +1017,7 @@ fun PlayerScreen(
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                         KeyEvent.KEYCODE_CHANNEL_DOWN -> {
                             if (liveZap) {
-                                val next = keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
-                                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_CHANNEL_UP
+                                val next = liveZapMovesNext(keyEvent.nativeKeyEvent.keyCode)
                                 livePlayback.adjacent(next, fromId = zapCursorId)?.let(requestLiveChannel)
                                 true
                             } else if (uiState.chapters.isEmpty()) {
