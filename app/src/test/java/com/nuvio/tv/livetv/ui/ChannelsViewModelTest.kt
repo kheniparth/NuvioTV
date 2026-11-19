@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.ui
 
+import android.view.KeyEvent
 import com.nuvio.tv.MainDispatcherRule
 import com.nuvio.tv.livetv.data.LiveTvCatalog
 import com.nuvio.tv.livetv.data.LiveTvChannel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -139,6 +141,16 @@ class ChannelsViewModelTest {
             adjacentChannel(channels, favorites, ChannelCategory.Recents, "c3", next = true, recentIds = listOf("c3", "c1"))?.id,
         )
         assertNull(adjacentChannel(emptyList(), emptySet(), ChannelCategory.All, "c1", next = true))
+    }
+
+    @Test
+    fun `down the list moves to the next channel`() {
+        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_DPAD_DOWN))
+        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_DOWN))
+        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_NEXT))
+        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_DPAD_UP))
+        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_UP))
+        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
     }
 
     @Test

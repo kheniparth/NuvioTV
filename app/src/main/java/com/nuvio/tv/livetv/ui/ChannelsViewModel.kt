@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.ui
 
+import android.view.KeyEvent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvCatalog
@@ -241,3 +242,9 @@ internal fun adjacentChannel(
     val nextIndex = if (next) (start + 1) % list.size else (start - 1 + list.size) % list.size
     return list[nextIndex]
 }
+
+/** Down the on-screen list is next: D-pad Down, channel-down, and media-next. */
+internal fun liveZapMovesNext(keyCode: Int): Boolean =
+    keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+        keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN ||
+        keyCode == KeyEvent.KEYCODE_MEDIA_NEXT
