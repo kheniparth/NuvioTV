@@ -136,6 +136,8 @@ fun SportsScreen(
     val listState = rememberLazyListState()
     val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
     val focus = rememberLiveTvColumnFocus()
+    val playback = rememberLiveTvPlayback()
+    val returnId = remember { playback.returnChannelId }
     LiveTvColumnBack(focus, onLeave = onBackPress)
     val allLabel = stringResource(R.string.livetv_category_all)
     var selectedLeague by rememberSaveable { mutableStateOf(SPORTS_ALL_KEY) }
@@ -151,8 +153,18 @@ fun SportsScreen(
     val visibleChannelIds = games
         .filter { "${it.game.leagueId}:${it.game.id}" in visibleGameKeys }
         .flatMap { row -> row.channels.map { it.id } }
-    val restoreChannelId = focus.restoreKey(selectedLeague, visibleChannelIds)
+    val returnGameIndex = if (returnId == null) -1 else games.indexOfFirst { row -> row.channels.any { it.id == returnId } }
+    val restoreChannelId = returnId?.takeIf { returnGameIndex >= 0 }
+        ?: focus.restoreKey(selectedLeague, visibleChannelIds)
         ?: games.firstNotNullOfOrNull { it.channels.firstOrNull()?.id }
+    LiveTvRestorePlayedChannel(
+        channelId = returnId,
+        rowIndex = returnGameIndex,
+        listReady = games.isNotEmpty() || !state.loading,
+        listState = listState,
+        focus = focus,
+        onDone = playback::clearReturnChannel,
+    )
     val restoreGameKey = games.firstOrNull { row -> row.channels.any { it.id == restoreChannelId } }
         ?.let { "${it.game.leagueId}:${it.game.id}" }
 
@@ -167,6 +179,7 @@ fun SportsScreen(
             selectedKey = selectedLeague,
             onSelect = { selectedLeague = it },
             focus = focus,
+            focusCategoryOnEnter = returnId == null,
             modifier = Modifier.weight(0.2f),
         )
         Column(
@@ -208,6 +221,7 @@ fun SportsScreen(
                                 scope.launch {
                                     try {
                                         val playable = viewModel.playable(channel)
+                                        playback.noteReturnChannel(channel.id)
                                         onPlay(playable.url, playable.headers, channel.name)
                                     } catch (error: CancellationException) {
                                         throw error

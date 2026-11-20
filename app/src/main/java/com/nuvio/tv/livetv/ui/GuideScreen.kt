@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -81,7 +82,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val GUIDE_ALL_KEY = "all"
-private val GuideChannelColumnWidth = 168.dp
 private val GuideRowHeight = 76.dp
 private val GuideRulerHeight = 30.dp
 private val GuideTimelineWidth = (GUIDE_WINDOW_MILLIS / 60_000f * GUIDE_DP_PER_MINUTE).dp
@@ -151,9 +151,13 @@ fun GuideScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val playback = rememberLiveTvPlayback()
     val onChannelClick: (LiveTvChannel) -> Unit = { channel ->
         scope.launch {
-            viewModel.playableFor(channel)?.let { onPlayChannel(channel, it) }
+            viewModel.playableFor(channel)?.let { playable ->
+                playback.noteReturnChannel(channel.id)
+                onPlayChannel(channel, playable)
+            }
         }
     }
     GuideContent(
@@ -172,6 +176,11 @@ private fun GuideContent(
     val channels = remember(state.channels, state.selectedCategory) {
         state.channels.filter { state.selectedCategory == null || it.group?.trim() == state.selectedCategory }
     }
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val categoryWidth = guideCategoryWidthDp(screenWidthDp).dp
+    val channelColumnWidth = guideChannelColumnWidthDp(screenWidthDp).dp
+    val playback = rememberLiveTvPlayback()
+    val returnId = remember { playback.returnChannelId }
     val nowMillis = rememberGuideNowMillis()
     val windowStart = remember(state.nowMillis) { guideWindowStart(state.nowMillis) }
     val timelineScroll = rememberScrollState()
@@ -185,7 +194,18 @@ private fun GuideContent(
     var previewChannel by remember { mutableStateOf<LiveTvChannel?>(null) }
     val listState = rememberLazyListState()
     val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
-    val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: channels.firstOrNull()?.id
+    val returnIndex = if (returnId == null) -1 else channels.indexOfFirst { it.id == returnId }
+    val restoreId = returnId?.takeIf { returnIndex >= 0 }
+        ?: focus.restoreKey(selectedKey, visibleKeys)
+        ?: channels.firstOrNull()?.id
+    LiveTvRestorePlayedChannel(
+        channelId = returnId,
+        rowIndex = returnIndex,
+        listReady = channels.isNotEmpty() || !state.loading,
+        listState = listState,
+        focus = focus,
+        onDone = playback::clearReturnChannel,
+    )
     val previewPrograms = previewChannel?.let { state.programs[it.id] }.orEmpty()
     val nowTitle = previewPrograms.firstOrNull { it.startMillis <= nowMillis && nowMillis < it.endMillis }?.title
     val nextTitle = previewPrograms.firstOrNull { it.startMillis > nowMillis }?.title
@@ -201,7 +221,8 @@ private fun GuideContent(
             selectedKey = selectedKey,
             onSelect = { key -> onCategorySelected(key.takeUnless { it == GUIDE_ALL_KEY }) },
             focus = focus,
-            modifier = Modifier.weight(0.2f),
+            focusCategoryOnEnter = returnId == null,
+            modifier = Modifier.width(categoryWidth),
         )
         Column(
             modifier = Modifier
@@ -215,7 +236,12 @@ private fun GuideContent(
                 color = NuvioTheme.colors.TextPrimary,
             )
             Spacer(Modifier.height(12.dp))
-            GuideTimeRuler(windowStart = windowStart, nowMillis = nowMillis, scrollState = timelineScroll)
+            GuideTimeRuler(
+                windowStart = windowStart,
+                nowMillis = nowMillis,
+                scrollState = timelineScroll,
+                channelColumnWidth = channelColumnWidth,
+            )
             when {
                 state.loading && state.channels.isEmpty() -> Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -240,6 +266,7 @@ private fun GuideContent(
                             windowStart = windowStart,
                             nowMillis = nowMillis,
                             scrollState = timelineScroll,
+                            channelColumnWidth = channelColumnWidth,
                             focusRequester = focus.listRequester.takeIf { channel.id == restoreId },
                             onClick = {
                                 previewViewModel.stopForPlayback()
@@ -278,10 +305,15 @@ private fun rememberGuideNowMillis(): Long {
 }
 
 @Composable
-private fun GuideTimeRuler(windowStart: Long, nowMillis: Long, scrollState: ScrollState) {
+private fun GuideTimeRuler(
+    windowStart: Long,
+    nowMillis: Long,
+    scrollState: ScrollState,
+    channelColumnWidth: Dp,
+) {
     val format = rememberGuideTimeFormat()
     Row(modifier = Modifier.fillMaxWidth().height(GuideRulerHeight)) {
-        Spacer(Modifier.width(GuideChannelColumnWidth))
+        Spacer(Modifier.width(channelColumnWidth))
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scrollState)) {
             Box(Modifier.width(GuideTimelineWidth).fillMaxHeight()) {
                 repeat((GUIDE_WINDOW_MILLIS / GUIDE_SLOT_MILLIS).toInt()) { index ->
@@ -309,6 +341,7 @@ private fun GuideRow(
     windowStart: Long,
     nowMillis: Long,
     scrollState: ScrollState,
+    channelColumnWidth: Dp,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
@@ -328,7 +361,12 @@ private fun GuideRow(
             .focusGroup()
             .onFocusChanged { onFocusChanged(it.hasFocus || it.isFocused) },
     ) {
-        GuideChannelCell(channel = channel, onClick = onClick, focusRequester = focusRequester)
+        GuideChannelCell(
+            channel = channel,
+            columnWidth = channelColumnWidth,
+            onClick = onClick,
+            focusRequester = focusRequester,
+        )
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scrollState)) {
             // shortcut: a row composes only the programmes inside the bounded window; make it a LazyRow if the window grows.
             Box(Modifier.width(GuideTimelineWidth).fillMaxHeight()) {
@@ -349,10 +387,11 @@ private fun GuideRow(
 @Composable
 private fun GuideChannelCell(
     channel: LiveTvChannel,
+    columnWidth: Dp,
     onClick: () -> Unit,
     focusRequester: FocusRequester?,
 ) {
-    val base = Modifier.width(GuideChannelColumnWidth).fillMaxHeight()
+    val base = Modifier.width(columnWidth).fillMaxHeight()
     Surface(
         onClick = onClick,
         modifier = if (focusRequester != null) base.focusRequester(focusRequester) else base,
@@ -397,9 +436,11 @@ private fun GuideChannelCell(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = channel.name,
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
                 color = NuvioTheme.colors.TextPrimary,
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis,
             )
         }
