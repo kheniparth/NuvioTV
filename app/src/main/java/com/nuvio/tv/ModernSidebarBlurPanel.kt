@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -154,9 +154,7 @@ internal fun ModernSidebarBlurPanel(
     ) {
         if (showProfileSelector && activeProfileName.isNotEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = NuvioTheme.spacing.md),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 SidebarProfileItem(
@@ -173,17 +171,18 @@ internal fun ModernSidebarBlurPanel(
                 )
             }
         } else {
+            // Own slot above the items. A visual offset was drawn on top of Home.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .offset(y = NuvioTheme.spacing.md),
+                    .height(36.dp),
                 contentAlignment = Alignment.Center
             ) {
                 BrandWordmark(
                     contentDescription = stringResource(R.string.app_name),
                     modifier = Modifier
                         .fillMaxWidth(0.72f)
-                        .height(36.dp),
+                        .fillMaxHeight(),
                     alpha = sidebarLabelAlpha
                 )
             }
@@ -194,35 +193,31 @@ internal fun ModernSidebarBlurPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .clipToBounds(),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm - NuvioTheme.spacing.xxs),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.offset(y = (-12).dp),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm - NuvioTheme.spacing.xxs)
-            ) {
-                drawerItems.forEachIndexed { index, item ->
-                    key(item.route) {
-                        SidebarNavigationItem(
-                            label = item.label,
-                            iconRes = item.iconRes,
-                            icon = item.icon,
-                            selected = selectedDrawerRoute == item.route,
-                            focusEnabled = keepSidebarFocusDuringCollapse,
-                            labelAlpha = sidebarLabelAlpha,
-                            iconScale = sidebarIconScale,
-                            onFocusChanged = {
-                                if (it) {
-                                    onDrawerItemFocused(index)
-                                }
-                            },
-                            onClick = { onDrawerItemClick(item.route) },
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .focusRequester(drawerItemFocusRequesters.getValue(item.route))
-                        )
-                    }
+            drawerItems.forEachIndexed { index, item ->
+                key(item.route) {
+                    SidebarNavigationItem(
+                        label = item.label,
+                        iconRes = item.iconRes,
+                        icon = item.icon,
+                        selected = selectedDrawerRoute == item.route,
+                        focusEnabled = keepSidebarFocusDuringCollapse,
+                        labelAlpha = sidebarLabelAlpha,
+                        iconScale = sidebarIconScale,
+                        onFocusChanged = {
+                            if (it) {
+                                onDrawerItemFocused(index)
+                            }
+                        },
+                        onClick = { onDrawerItemClick(item.route) },
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .focusRequester(drawerItemFocusRequesters.getValue(item.route))
+                    )
                 }
             }
         }

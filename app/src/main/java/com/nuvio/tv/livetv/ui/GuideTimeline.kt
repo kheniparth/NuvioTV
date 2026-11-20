@@ -5,6 +5,11 @@ internal const val GUIDE_SLOT_MILLIS = 30L * 60L * 1000L
 internal const val GUIDE_WINDOW_MILLIS = 12L * 60L * 60L * 1000L
 internal const val GUIDE_DP_PER_MINUTE = 4f
 
+/** Shares of the grid beside the preview. Names stay near a quarter; the timeline keeps at least 60%. */
+internal const val GUIDE_CATEGORY_SHARE = 0.16f
+internal const val GUIDE_NAME_SHARE = 0.24f
+internal const val GUIDE_TIMELINE_SHARE = 0.60f
+
 internal data class GuideProgrammeSpan(val xDp: Float, val widthDp: Float)
 
 /** The window starts one slot before [nowMillis] so the now-line is never at the very edge. */

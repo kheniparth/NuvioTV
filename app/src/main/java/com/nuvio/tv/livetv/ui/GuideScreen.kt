@@ -81,7 +81,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val GUIDE_ALL_KEY = "all"
-private val GuideChannelColumnWidth = 168.dp
 private val GuideRowHeight = 76.dp
 private val GuideRulerHeight = 30.dp
 private val GuideTimelineWidth = (GUIDE_WINDOW_MILLIS / 60_000f * GUIDE_DP_PER_MINUTE).dp
@@ -201,11 +200,11 @@ private fun GuideContent(
             selectedKey = selectedKey,
             onSelect = { key -> onCategorySelected(key.takeUnless { it == GUIDE_ALL_KEY }) },
             focus = focus,
-            modifier = Modifier.weight(0.2f),
+            modifier = Modifier.weight(GUIDE_CATEGORY_SHARE),
         )
         Column(
             modifier = Modifier
-                .weight(0.8f)
+                .weight(GUIDE_NAME_SHARE + GUIDE_TIMELINE_SHARE)
                 .fillMaxHeight()
                 .liveTvReturnToCategories(focus),
         ) {
@@ -281,8 +280,8 @@ private fun rememberGuideNowMillis(): Long {
 private fun GuideTimeRuler(windowStart: Long, nowMillis: Long, scrollState: ScrollState) {
     val format = rememberGuideTimeFormat()
     Row(modifier = Modifier.fillMaxWidth().height(GuideRulerHeight)) {
-        Spacer(Modifier.width(GuideChannelColumnWidth))
-        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scrollState)) {
+        Spacer(Modifier.weight(GUIDE_NAME_SHARE))
+        Box(Modifier.weight(GUIDE_TIMELINE_SHARE).fillMaxHeight().horizontalScroll(scrollState)) {
             Box(Modifier.width(GuideTimelineWidth).fillMaxHeight()) {
                 repeat((GUIDE_WINDOW_MILLIS / GUIDE_SLOT_MILLIS).toInt()) { index ->
                     val slotStart = windowStart + index * GUIDE_SLOT_MILLIS
@@ -328,8 +327,13 @@ private fun GuideRow(
             .focusGroup()
             .onFocusChanged { onFocusChanged(it.hasFocus || it.isFocused) },
     ) {
-        GuideChannelCell(channel = channel, onClick = onClick, focusRequester = focusRequester)
-        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scrollState)) {
+        GuideChannelCell(
+            channel = channel,
+            onClick = onClick,
+            focusRequester = focusRequester,
+            modifier = Modifier.weight(GUIDE_NAME_SHARE).fillMaxHeight(),
+        )
+        Box(Modifier.weight(GUIDE_TIMELINE_SHARE).fillMaxHeight().horizontalScroll(scrollState)) {
             // shortcut: a row composes only the programmes inside the bounded window; make it a LazyRow if the window grows.
             Box(Modifier.width(GuideTimelineWidth).fillMaxHeight()) {
                 cells.forEach { (programme, span) ->
@@ -351,8 +355,9 @@ private fun GuideChannelCell(
     channel: LiveTvChannel,
     onClick: () -> Unit,
     focusRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
 ) {
-    val base = Modifier.width(GuideChannelColumnWidth).fillMaxHeight()
+    val base = modifier
     Surface(
         onClick = onClick,
         modifier = if (focusRequester != null) base.focusRequester(focusRequester) else base,
@@ -436,7 +441,8 @@ private fun GuideProgrammeCell(
                 text = programme.title,
                 style = MaterialTheme.typography.labelMedium,
                 color = NuvioTheme.colors.TextPrimary,
-                maxLines = 2,
+                maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
