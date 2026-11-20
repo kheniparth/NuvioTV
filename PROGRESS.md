@@ -89,4 +89,5 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 
 ## Secrets (never commit)
 `/mnt/d/stalker/.env` (Stalker host, MAC, addon token), nuvio-enhanced `.env` (login), keystores and their
-passwords, `local.properties`.
+passwords, `local.properties` (includes `TMDB_API_KEY`; factory copy is
+`~/nuvio/factory/NuvioTV.local.properties`).

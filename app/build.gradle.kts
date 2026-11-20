@@ -71,6 +71,13 @@ val localProperties = Properties().apply {
     }
 }
 
+// Missing, blank, or whitespace-only TMDB keys ship silently broken metadata; warn always and fail release.
+val tmdbApiKeyMissingMessage = "TMDB_API_KEY missing: metadata will not load"
+val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY").orEmpty().trim()
+if (tmdbApiKey.isEmpty()) {
+    logger.warn(tmdbApiKeyMissingMessage)
+}
+
 val devProperties = Properties().apply {
     val devPropertiesFile = rootProject.file("local.dev.properties")
     if (devPropertiesFile.exists()) {
@@ -150,7 +157,7 @@ android {
         buildConfigField("String", "SIMKL_CLIENT_ID", buildConfigString(resolveProperty(devProperties, localProperties, "SIMKL_CLIENT_ID")))
         buildConfigField("String", "SIMKL_APP_NAME", buildConfigString(resolveProperty(devProperties, localProperties, "SIMKL_APP_NAME", "nuvio")))
         buildConfigField("String", "MDBLIST_CLIENT_ID", buildConfigString(resolveProperty(devProperties, localProperties, "MDBLIST_CLIENT_ID")))
-        buildConfigField("String", "TMDB_API_KEY", "\"${localProperties.getProperty("TMDB_API_KEY", "")}\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://nuvio.tv/tv-login")}\"")
         buildConfigField("String", "DEVICE_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("DEVICE_LOGIN_WEB_BASE_URL", "https://nuvio.tv/link")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
@@ -388,6 +395,14 @@ afterEvaluate {
         if (name.endsWith("AndroidTest")) {
             keepRulesConfigurations.add("-keep class j\$.** { *; }")
         }
+    }
+}
+
+// Fail release before any compile work when the key is absent (debug still warns above).
+gradle.taskGraph.whenReady {
+    val releaseRequested = allTasks.any { it.path == ":app:assembleFullRelease" || it.name == "assembleFullRelease" }
+    if (releaseRequested && tmdbApiKey.isEmpty()) {
+        throw GradleException(tmdbApiKeyMissingMessage)
     }
 }
 
