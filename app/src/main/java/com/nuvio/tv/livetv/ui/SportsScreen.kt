@@ -278,7 +278,7 @@ private fun SportsGameBlock(
                 text = game.leagueLabel,
                 color = NuvioTheme.colors.TextSecondary,
                 modifier = Modifier.weight(1f),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -333,6 +333,13 @@ private fun SportsGameBlock(
             }
         }
     }
+}
+
+/** "LIVE" once. A clock or period still follows the badge. */
+internal fun liveSportsStatus(badge: String, statusDetail: String): String {
+    val detail = statusDetail.trim()
+    if (detail.isEmpty() || detail.equals(badge, ignoreCase = true)) return badge
+    return "$badge $detail"
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -390,10 +397,7 @@ private fun SportsChannelCard(
 
 @Composable
 private fun sportsStatus(game: SportsGame, nowMillis: Long): String = when (game.state) {
-    SportsState.Live -> {
-        val badge = stringResource(R.string.livetv_sports_live)
-        if (game.statusDetail.isBlank()) badge else "$badge ${game.statusDetail}"
-    }
+    SportsState.Live -> liveSportsStatus(stringResource(R.string.livetv_sports_live), game.statusDetail)
     SportsState.Upcoming -> formatSportsStart(game.startMillis, nowMillis)
     SportsState.Finished -> game.statusDetail.ifBlank { formatSportsStart(game.startMillis, nowMillis) }
 }

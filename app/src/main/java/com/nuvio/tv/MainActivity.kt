@@ -1664,12 +1664,9 @@ private fun LegacySidebarScaffold(
                         label = "legacySidebarItemWidth"
                     )
 
+                    Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {
                     if (isExpanded) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                        ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Spacer(modifier = Modifier.height(30.dp))
                             if (showProfileSelector && activeProfileName.isNotEmpty()) {
                                 var isProfileFocused by remember { mutableStateOf(false) }
@@ -1725,13 +1722,13 @@ private fun LegacySidebarScaffold(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
 
                     Column(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .offset(y = 28.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
@@ -1760,9 +1757,13 @@ private fun LegacySidebarScaffold(
                                         .width(itemWidth)
                                         .offset(x = NuvioTheme.spacing.md)
                                 )
+                            }
                         }
                     }
-                }
+                    if (!isExpanded) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    }
             }
         }
         }
