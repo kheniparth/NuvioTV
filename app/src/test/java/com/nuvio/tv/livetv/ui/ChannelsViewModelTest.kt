@@ -60,6 +60,8 @@ class ChannelsViewModelTest {
         val news = rows.first { it.channel.id == "c1" }
         assertEquals("On now", news.nowTitle)
         assertEquals("Up next", news.nextTitle)
+        assertEquals(0L, news.nowStartMillis)
+        assertEquals(2_000L, news.nowEndMillis)
         assertNull(rows.first { it.channel.id == "c2" }.nowTitle)
     }
 

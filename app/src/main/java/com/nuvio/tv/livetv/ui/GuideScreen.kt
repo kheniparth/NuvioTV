@@ -69,6 +69,7 @@ import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.SimpleDateFormat
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -186,8 +187,9 @@ private fun GuideContent(
     val listState = rememberLazyListState()
     val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
     val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: channels.firstOrNull()?.id
-    val previewPrograms = previewChannel?.let { state.programs[it.id] }.orEmpty()
-    val nowTitle = previewPrograms.firstOrNull { it.startMillis <= nowMillis && nowMillis < it.endMillis }?.title
+    val displayChannel = previewChannel ?: channels.firstOrNull()
+    val previewPrograms = displayChannel?.let { state.programs[it.id] }.orEmpty()
+    val nowProgram = previewPrograms.firstOrNull { it.isAiringAt(nowMillis) }
     val nextTitle = previewPrograms.firstOrNull { it.startMillis > nowMillis }?.title
 
     Row(
@@ -201,20 +203,30 @@ private fun GuideContent(
             selectedKey = selectedKey,
             onSelect = { key -> onCategorySelected(key.takeUnless { it == GUIDE_ALL_KEY }) },
             focus = focus,
-            modifier = Modifier.weight(0.2f),
+            modifier = Modifier.weight(0.22f),
         )
         Column(
             modifier = Modifier
-                .weight(0.8f)
+                .weight(0.78f)
                 .fillMaxHeight()
                 .liveTvReturnToCategories(focus),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = stringResource(R.string.livetv_guide_title),
-                style = MaterialTheme.typography.headlineMedium,
-                color = NuvioTheme.colors.TextPrimary,
-            )
-            Spacer(Modifier.height(12.dp))
+            if (displayChannel != null) {
+                LiveTvPreviewPanel(
+                    focusedChannel = previewChannel,
+                    displayChannel = displayChannel,
+                    nowTitle = nowProgram?.title,
+                    nextTitle = nextTitle,
+                    timeRange = nowProgram?.let {
+                        formatLiveTvClockRange(it.startMillis, it.endMillis, ZoneId.systemDefault())
+                    },
+                    description = nowProgram?.description,
+                    live = nowProgram != null,
+                    scrollInProgress = listState.isScrollInProgress,
+                    viewModel = previewViewModel,
+                )
+            }
             GuideTimeRuler(windowStart = windowStart, nowMillis = nowMillis, scrollState = timelineScroll)
             when {
                 state.loading && state.channels.isEmpty() -> Box(
@@ -254,14 +266,6 @@ private fun GuideContent(
                 }
             }
         }
-        LiveTvPreviewPanel(
-            focusedChannel = previewChannel,
-            nowTitle = nowTitle,
-            nextTitle = nextTitle,
-            scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier.width(LiveTvPreviewPanelWidth),
-            viewModel = previewViewModel,
-        )
     }
 }
 
