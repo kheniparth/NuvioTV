@@ -1310,7 +1310,6 @@
     <string name="mdblist_rate_limited">Đã đạt giới hạn yêu cầu của MDBList. Quá trình đồng bộ sẽ tiếp tục sau khi giới hạn được đặt lại.</string>
     <string name="mdblist_revoke_failed">Đã ngắt kết nối trên thiết bị này. Vui lòng xóa ứng dụng trong phần cài đặt tài khoản MDBList để thu hồi quyền truy cập.</string>
     <string name="mdblist_title">Điểm đánh giá MDBList</string>
-    <string name="mdblist_subtitle">Cấu hình các điểm đánh giá bên ngoài hiển thị trong chi tiết của Khu vực Nổi bật</string>
     <string name="mdblist_enable_title">Bật điểm đánh giá MDBList</string>
     <string name="mdblist_enable_subtitle">Lấy điểm đánh giá từ các nhà cung cấp bên ngoài trên màn hình chi tiết siêu dữ liệu</string>
     <string name="mdblist_api_key_title">Mã khóa API</string>
@@ -1337,7 +1336,6 @@
     <string name="mdblist_show_on_hero_title">Sử dụng điểm đánh giá trên Khu vực nổi bật</string>
     <string name="mdblist_show_on_hero_subtitle">Hiển thị điểm đánh giá MDBList trên vòng quay khu vực nổi bật (hiện đại và cổ điển/lưới)</string>
     <string name="mdblist_rating_order_title">Thứ tự điểm đánh giá</string>
-    <string name="mdblist_rating_order_subtitle">Chọn 3 điểm đánh giá được bật và có sẵn đầu tiên sẽ hiển thị trên khu vực nổi bật hiện đại. Dùng mũi tên để sắp xếp lại.</string>
     <string name="mdblist_dialog_title">Mã khóa API của MDBList</string>
     <string name="mdblist_dialog_subtitle">Nhập mã khóa API để lấy điểm đánh giá bên ngoài</string>
     <string name="mdblist_dialog_placeholder">Nhập mã khóa API của MDBList</string>
@@ -3497,7 +3495,6 @@
     <string name="autosync_tolerance_value">%1$d ms</string>
     <string name="autosync_thorough_title">Tìm kiếm tự động đồng bộ chính xác</string>
     <string name="autosync_thorough_description">Tiếp tục so sánh các phụ đề khác với bản nhúng sẵn để tìm bản khớp hơn trước khi đồng bộ. Khi tắt, bản khớp đầu tiên sẽ được dùng ngay. Chỉ bản khớp có độ tin cậy cao mới được áp dụng</string>
-    <string name="autosync_toast_no_fit">Đồng bộ thất bại: Phụ đề không khớp với bản video này.</string>
     <string name="autosync_label_synced">Đã tự động đồng bộ</string>
     <string name="stream_resume_from_time">Xem tiếp từ %1$s</string>
     <string name="stream_resume_from_percent">Xem tiếp từ %1$d%%</string>
