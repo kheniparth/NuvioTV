@@ -1,6 +1,6 @@
 # Nuvio progress
 
-Last updated: 2026-11-18. Single source of truth for picking the work back up with any agent.
+Last updated: 2026-11-20. Single source of truth for picking the work back up with any agent.
 Update it at the end of every work session (see [AGENTS.md](AGENTS.md)).
 
 ## Goal
@@ -30,22 +30,33 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   #38 Sports never loads (PR #41), #39 no EPG/logos (PR #42), #40 preview as a side panel (PR #44),
   bootstrap on fresh installs (PR #36).
 
-## Current state (2026-11-18)
-- TV fork `dev` has the full Live TV feature. Open: PR #48 (#45 category column), PR #49 (#47 preview flashes
-  and disappears), #50 (release builds lose Live TV settings: R8 renames Gson fields).
-- The owner's TV runs the release build (`com.nuvio.tv`, signed in, no Live TV sources yet) because debug builds
-  lag (59% janky frames vs 24% release, 12% official). Release builds can't run `livetv-bootstrap.sh` (no run-as).
-- Desktop fork: no Live TV work yet; it only tracks upstream.
+- 2026-11-18/20: Follow-up fixes merged: #59, #64, #70-#75, #79-#82 (see Current state). Remaining work
+  filed as #83-#85 and desktop briefs D1-D8; queued on Paperclip.
+
+## Current state (2026-11-20)
+- TV fork `dev` has the full Live TV feature plus every fix filed so far. All Live TV issues through #82 are closed:
+  Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
+  CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
+  release builds keep Live TV settings (#52). None of these has been tested together on a device yet.
+- Real-TV testing is on hold (owner); emulator only, TV steps are queued as owner tests.
+- Desktop fork: no Live TV work yet, last upstream sync 2026-11-17. GitHub Issues are disabled on the fork; the
+  desktop work is written up as 8 briefs (D1-D8) on the Paperclip board (paperclip.kheni.site, company TechMuzz).
+- Work is now also queued on Paperclip (Parth's agent board). Paperclip tasks for NuvioTV link the GitHub issue;
+  check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. #45 (labelled `implement`, the factory will pick it up): categories as the first left column on every Live TV
-   screen (Channels, Guide, Sports, On Demand), one shared `LiveTvCategoryColumn`. Owner's layout preference.
-2. Build one release APK (`:app:assembleFullRelease`) with everything merged and test it on the emulator only
-   (batch the fixes: one combined build and test per set). Queue Chromecast tests until the owner lifts the hold.
-3. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
+1. #83 one combined release build (`:app:assembleFullRelease`) and test pass of everything merged 2026-11-19/20,
+   emulator now, Chromecast steps queued. Failures become new bug issues.
+2. #85 TMDB_API_KEY missing from `~/nuvio/factory/NuvioTV.local.properties` (owner adds the key; agents add the
+   missing-key warning/failure).
+3. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
+4. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
-4. Desktop fork: port Enhanced's `features/livetv/` (see "NuvioDesktop fork" in LIVE_TV_PORT_PLAN.md).
-   Do not merge Enhanced into it (~1,050 compile errors). macOS builds need the Mac or a macOS CI runner.
+5. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
+   D2 data layer + desktop storage, D3 settings page, D4 Channels + nav + libmpv playback with headers,
+   D5 Guide/Sports/On Demand, D6 in-player channel switching, D7 bootstrap + Windows packaging,
+   D8 macOS arm64 build in CI. Do not merge Enhanced into it (~1,050 compile errors). Bring the TV fixes over
+   (Stalker one stream per MAC, ESPN one day at a time, category-left layout, Down = next channel).
 
 ## How to build and test (TV)
 - Checks: `bash .factory/build.sh` (Gradle in WSL on a native-disk copy: `:app:assembleFullDebug
