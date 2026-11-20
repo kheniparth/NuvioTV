@@ -144,13 +144,27 @@ class ChannelsViewModelTest {
     }
 
     @Test
-    fun `down the list moves to the next channel`() {
-        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_DPAD_DOWN))
-        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_DOWN))
-        assertTrue(liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_NEXT))
-        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_DPAD_UP))
-        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_UP))
-        assertFalse(liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+    fun `live channel keys map to next and previous`() {
+        assertEquals(true, liveZapMovesNext(KeyEvent.KEYCODE_DPAD_DOWN))
+        assertEquals(true, liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_UP))
+        assertEquals(true, liveZapMovesNext(KeyEvent.KEYCODE_PAGE_UP))
+        assertEquals(true, liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_NEXT))
+        assertEquals(false, liveZapMovesNext(KeyEvent.KEYCODE_DPAD_UP))
+        assertEquals(false, liveZapMovesNext(KeyEvent.KEYCODE_CHANNEL_DOWN))
+        assertEquals(false, liveZapMovesNext(KeyEvent.KEYCODE_PAGE_DOWN))
+        assertEquals(false, liveZapMovesNext(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+    }
+
+    @Test
+    fun `movie and episode chapter keys stay on the old direction`() {
+        assertEquals(true, vodChapterSkipForward(KeyEvent.KEYCODE_MEDIA_NEXT))
+        assertEquals(true, vodChapterSkipForward(KeyEvent.KEYCODE_CHANNEL_UP))
+        assertEquals(false, vodChapterSkipForward(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+        assertEquals(false, vodChapterSkipForward(KeyEvent.KEYCODE_CHANNEL_DOWN))
+        assertNull(vodChapterSkipForward(KeyEvent.KEYCODE_PAGE_UP))
+        assertNull(vodChapterSkipForward(KeyEvent.KEYCODE_PAGE_DOWN))
+        assertNull(vodChapterSkipForward(KeyEvent.KEYCODE_DPAD_DOWN))
+        assertNull(vodChapterSkipForward(KeyEvent.KEYCODE_DPAD_UP))
     }
 
     @Test
