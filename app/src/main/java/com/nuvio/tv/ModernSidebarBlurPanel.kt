@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -154,9 +155,7 @@ internal fun ModernSidebarBlurPanel(
     ) {
         if (showProfileSelector && activeProfileName.isNotEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = NuvioTheme.spacing.md),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 SidebarProfileItem(
@@ -174,9 +173,7 @@ internal fun ModernSidebarBlurPanel(
             }
         } else {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = NuvioTheme.spacing.md),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 BrandWordmark(
@@ -191,38 +188,35 @@ internal fun ModernSidebarBlurPanel(
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
+        // The logo keeps this slot. Scrolling starts below it, so Home is not drawn on top of the wordmark.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm - NuvioTheme.spacing.xxs),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.offset(y = (-12).dp),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm - NuvioTheme.spacing.xxs)
-            ) {
-                drawerItems.forEachIndexed { index, item ->
-                    key(item.route) {
-                        SidebarNavigationItem(
-                            label = item.label,
-                            iconRes = item.iconRes,
-                            icon = item.icon,
-                            selected = selectedDrawerRoute == item.route,
-                            focusEnabled = keepSidebarFocusDuringCollapse,
-                            labelAlpha = sidebarLabelAlpha,
-                            iconScale = sidebarIconScale,
-                            onFocusChanged = {
-                                if (it) {
-                                    onDrawerItemFocused(index)
-                                }
-                            },
-                            onClick = { onDrawerItemClick(item.route) },
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .focusRequester(drawerItemFocusRequesters.getValue(item.route))
-                        )
-                    }
+            drawerItems.forEachIndexed { index, item ->
+                key(item.route) {
+                    SidebarNavigationItem(
+                        label = item.label,
+                        iconRes = item.iconRes,
+                        icon = item.icon,
+                        selected = selectedDrawerRoute == item.route,
+                        focusEnabled = keepSidebarFocusDuringCollapse,
+                        labelAlpha = sidebarLabelAlpha,
+                        iconScale = sidebarIconScale,
+                        onFocusChanged = {
+                            if (it) {
+                                onDrawerItemFocused(index)
+                            }
+                        },
+                        onClick = { onDrawerItemClick(item.route) },
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .focusRequester(drawerItemFocusRequesters.getValue(item.route))
+                    )
                 }
             }
         }
