@@ -16,6 +16,8 @@ import com.nuvio.tv.livetv.ui.LiveTvChannelsPanel
 import com.nuvio.tv.livetv.ui.LiveTvPlayRequest
 import com.nuvio.tv.livetv.ui.LiveTvZapDebounce
 import com.nuvio.tv.livetv.ui.liveZapMovesNext
+import com.nuvio.tv.livetv.ui.logLiveTvKey
+import com.nuvio.tv.livetv.ui.vodChapterSkipForward
 import com.nuvio.tv.livetv.ui.rememberLiveTvPlayback
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.accentBrush
@@ -764,6 +766,11 @@ fun PlayerScreen(
                 true
             }
             .onKeyEvent { keyEvent ->
+                if (uiState.contentType == "channel" &&
+                    keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                ) {
+                    logLiveTvKey(keyEvent.nativeKeyEvent.keyCode)
+                }
                 // KEY_UP confirm for Sync Line is consumed in onPreviewKeyEvent so it still
                 // runs after focus moves into the timing dialog.
                 if (uiState.showSubtitleDelayOverlay) {
@@ -1014,19 +1021,25 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_MEDIA_NEXT,
                         KeyEvent.KEYCODE_CHANNEL_UP,
+                        KeyEvent.KEYCODE_PAGE_UP,
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                        KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                        KeyEvent.KEYCODE_CHANNEL_DOWN,
+                        KeyEvent.KEYCODE_PAGE_DOWN -> {
+                            val keyCode = keyEvent.nativeKeyEvent.keyCode
                             if (liveZap) {
-                                val next = liveZapMovesNext(keyEvent.nativeKeyEvent.keyCode)
-                                livePlayback.adjacent(next, fromId = zapCursorId)?.let(requestLiveChannel)
+                                livePlayback.adjacent(
+                                    next = liveZapMovesNext(keyCode),
+                                    fromId = zapCursorId,
+                                )?.let(requestLiveChannel)
                                 true
-                            } else if (uiState.chapters.isEmpty()) {
-                                false
                             } else {
-                                val forward = keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
-                                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_CHANNEL_UP
-                                viewModel.onEvent(PlayerEvent.OnSkipChapter(forward))
-                                true
+                                val forward = vodChapterSkipForward(keyCode)
+                                if (forward == null || uiState.chapters.isEmpty()) {
+                                    false
+                                } else {
+                                    viewModel.onEvent(PlayerEvent.OnSkipChapter(forward))
+                                    true
+                                }
                             }
                         }
                         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
