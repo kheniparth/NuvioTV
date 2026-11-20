@@ -77,6 +77,9 @@ import com.nuvio.tv.livetv.data.filterLiveTvVodItems
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
+import com.nuvio.tv.domain.model.orderedEpisodes
+import com.nuvio.tv.domain.model.orderedSeasonTabs
+import com.nuvio.tv.ui.components.EpisodeListOrderButton
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.dpadRepeatThrottle
 import kotlinx.coroutines.launch
@@ -220,6 +223,10 @@ fun OnDemandScreen(
                     isFavorite = series.id in uiState.favoriteIds,
                     onToggleFavorite = { viewModel.toggleFavorite(series.id) },
                     onRetry = { viewModel.retryEpisodes(series) },
+                    episodeListOrder = uiState.episodeListOrder,
+                    onEpisodeListOrderSelected = { order ->
+                        viewModel.setEpisodeListOrder(order)
+                    },
                     onEpisodeClick = { episode ->
                         startPlayback { viewModel.playback(series, episode) }
                     },
@@ -320,13 +327,20 @@ private fun SeriesEpisodes(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onRetry: () -> Unit,
+    episodeListOrder: com.nuvio.tv.domain.model.EpisodeListOrder,
+    onEpisodeListOrderSelected: (com.nuvio.tv.domain.model.EpisodeListOrder) -> Unit,
     onEpisodeClick: (LiveTvVodEpisode) -> Unit,
 ) {
     val episodes = state?.episodes.orEmpty()
-    val seasons = remember(episodes) { episodes.map { it.season }.distinct() }
+    val seasons = remember(episodes, episodeListOrder) {
+        episodes.map { it.season }.distinct().orderedSeasonTabs(episodeListOrder)
+    }
     var selectedSeason by rememberSaveable(series.id) { mutableStateOf<Int?>(null) }
     val activeSeason = selectedSeason?.takeIf { it in seasons } ?: seasons.firstOrNull()
-    val seasonEpisodes = remember(episodes, activeSeason) { episodes.filter { it.season == activeSeason } }
+    val seasonEpisodes = remember(episodes, activeSeason, episodeListOrder) {
+        episodes.filter { it.season == activeSeason }
+            .orderedEpisodes(episodeListOrder, { it.season }, { it.episodeNumber })
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)) {
@@ -391,6 +405,16 @@ private fun SeriesEpisodes(
         }
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+
+        EpisodeListOrderButton(
+            order = episodeListOrder,
+            onOrderSelected = {
+                selectedSeason = null
+                onEpisodeListOrderSelected(it)
+            },
+        )
+
+        Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
 
         when {
             state == null || state.isLoading -> LoadingIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))

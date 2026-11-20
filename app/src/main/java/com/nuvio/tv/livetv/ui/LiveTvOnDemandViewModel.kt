@@ -8,6 +8,8 @@ import com.nuvio.tv.livetv.data.LiveTvVodItem
 import com.nuvio.tv.livetv.data.LiveTvVodKind
 import com.nuvio.tv.livetv.data.LiveTvVodPlayback
 import com.nuvio.tv.livetv.data.LiveTvVodRepository
+import com.nuvio.tv.data.local.EpisodeListOrderDataStore
+import com.nuvio.tv.domain.model.EpisodeListOrder
 import com.nuvio.tv.livetv.data.local.LiveTvSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -38,6 +40,7 @@ data class LiveTvOnDemandUiState(
     val catalogs: Map<LiveTvVodKind, LiveTvVodCatalogState> = emptyMap(),
     val hasSource: Boolean = true,
     val favoriteIds: Set<String> = emptySet(),
+    val episodeListOrder: EpisodeListOrder = EpisodeListOrder.OldestFirst,
     val episodes: Map<String, LiveTvVodEpisodesState> = emptyMap(),
 ) {
     fun catalog(kind: LiveTvVodKind): LiveTvVodCatalogState =
@@ -48,6 +51,7 @@ data class LiveTvOnDemandUiState(
 class LiveTvOnDemandViewModel @Inject constructor(
     private val repository: LiveTvVodRepository,
     private val store: LiveTvSettingsDataStore,
+    private val episodeListOrderStore: EpisodeListOrderDataStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LiveTvOnDemandUiState())
     val uiState: StateFlow<LiveTvOnDemandUiState> = _uiState.asStateFlow()
@@ -58,7 +62,17 @@ class LiveTvOnDemandViewModel @Inject constructor(
                 _uiState.update { it.copy(favoriteIds = settings.favoriteVodIds.toSet()) }
             }
         }
+        viewModelScope.launch {
+            episodeListOrderStore.order.collect { order ->
+                _uiState.update { it.copy(episodeListOrder = order) }
+            }
+        }
         load(LiveTvVodKind.Movies)
+    }
+
+    fun setEpisodeListOrder(order: EpisodeListOrder) {
+        _uiState.update { it.copy(episodeListOrder = order) }
+        viewModelScope.launch { episodeListOrderStore.set(order) }
     }
 
     fun selectKind(kind: LiveTvVodKind) {
