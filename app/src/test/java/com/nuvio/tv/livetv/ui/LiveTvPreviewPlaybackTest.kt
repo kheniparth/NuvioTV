@@ -5,6 +5,7 @@ import com.nuvio.tv.MainDispatcherRule
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -47,7 +48,8 @@ class LiveTvPreviewPlaybackTest {
         )
         val headers = mapOf("User-Agent" to "MAG254", "Authorization" to "Bearer t")
         val repository = mockk<LiveTvRepository>()
-        coEvery { repository.resolvePlayableUrl(channel) } returns LiveTvPlayable("http://cdn/live.m3u8", headers)
+        every { repository.stalkerPreviewBlocked() } returns false
+        coEvery { repository.openChannel(channel, StalkerStage.Preview, any()) } returns LiveTvPlayable("http://cdn/live.m3u8", headers)
         val player = mockk<LiveTvPreviewPlayer>(relaxed = true)
         val viewModel = LiveTvPreviewViewModel(repository, player)
 
@@ -55,7 +57,7 @@ class LiveTvPreviewPlaybackTest {
         advanceTimeBy(PREVIEW_FOCUS_DELAY_MILLIS)
         runCurrent()
 
-        coVerify { repository.resolvePlayableUrl(channel) }
+        coVerify { repository.openChannel(channel, StalkerStage.Preview, any()) }
         verify { player.play("http://cdn/live.m3u8", headers, MimeTypes.APPLICATION_M3U8) }
     }
 

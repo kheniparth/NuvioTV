@@ -33,6 +33,7 @@ class LiveTvRepository @Inject constructor(
     private val stalker: StalkerClient,
     private val cache: LiveTvCache,
     private val settingsStore: LiveTvSettingsDataStore,
+    private val stalkerGate: StalkerStreamGate = StalkerStreamGate(),
 ) {
     val hasConfiguredSource: Flow<Boolean> = settingsStore.settings.map { it.hasConfiguredSource() }
 
@@ -109,6 +110,44 @@ class LiveTvRepository @Inject constructor(
         val resolved = if (settings == null) channel else stalker.createLink(channel, settings)
         return LiveTvPlayable(resolved.streamUrl, resolved.headers)
     }
+
+    /**
+     * Stalker only: release the previous stream, then a fresh create_link.
+     * Xtream and M3U return the URL they already have.
+     */
+    suspend fun openChannel(
+        channel: LiveTvChannel,
+        stage: StalkerStage,
+        release: suspend () -> Unit = {},
+    ): LiveTvPlayable {
+        val settings = stalkerSettings(channel) ?: return resolvePlayableUrl(channel)
+        return stalkerGate.open(settings.macAddress, channel.id, stage, release) {
+            resolvePlayableUrl(channel)
+        }
+    }
+
+    /** CDN 403/401: the playing link is dropped, then a new create_link is taken. */
+    suspend fun retryStalker(
+        channel: LiveTvChannel,
+        status: Int,
+        failedAttempt: Int,
+        release: suspend () -> Unit = {},
+    ): LiveTvPlayable {
+        val settings = stalkerSettings(channel) ?: return resolvePlayableUrl(channel)
+        return stalkerGate.retry(
+            settings.macAddress,
+            channel.id,
+            stalkerGate.lastStage,
+            status,
+            failedAttempt,
+            release,
+        ) { resolvePlayableUrl(channel) }
+    }
+
+    fun stalkerPreviewBlocked(): Boolean = stalkerGate.fullPlayerLoading
+
+    private suspend fun stalkerSettings(channel: LiveTvChannel) =
+        if (channel.stalkerCommand.isNullOrBlank()) null else sources.current().stalker
 
     suspend fun toggleFavorite(channelId: String) {
         val current = settingsStore.settings.first().favoriteChannelIds.toMutableSet()

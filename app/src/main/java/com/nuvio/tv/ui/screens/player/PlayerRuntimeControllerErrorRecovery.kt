@@ -8,9 +8,14 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import com.nuvio.tv.R
 import com.nuvio.tv.core.util.findCause
+import java.net.URLEncoder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+internal data class LiveStalkerReady(val url: String, val headers: Map<String, String>)
 
 private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
@@ -27,8 +32,10 @@ internal fun isLiveTvForbiddenRetry(contentType: String?, httpStatus: Int?): Boo
  * Returns true when a retry was scheduled.
  */
 internal fun PlayerRuntimeController.tryLiveTvForbiddenRetry(error: PlaybackException): Boolean {
+    val status = error.findInvalidResponseCodeException()?.responseCode
+    if (tryLiveTvStalkerRetry(status)) return true
     if (hasRetriedLiveTvForbidden) return false
-    if (!isLiveTvForbiddenRetry(contentType, error.findInvalidResponseCodeException()?.responseCode)) return false
+    if (!isLiveTvForbiddenRetry(contentType, status)) return false
     hasRetriedLiveTvForbidden = true
     val paused = userPausedManually
 
@@ -53,6 +60,65 @@ internal fun PlayerRuntimeController.tryLiveTvForbiddenRetry(error: PlaybackExce
         reinitializeCurrentStream(startPaused = paused)
     }
     return true
+}
+
+/** Stalker CDN 403/401: drop the open stream, then play a fresh create_link. Up to three tries. */
+internal fun PlayerRuntimeController.tryLiveTvStalkerRetry(status: Int?): Boolean {
+    if (!contentType.equals("channel", ignoreCase = true)) return false
+    if (status != 403 && status != 401) return false
+    if (!liveChannelIsStalker()) return false
+    val refresh = liveStalkerRefresh ?: return false
+    if (hasRenderedFirstFrame) stalkerFailedAttempts = 0
+    stalkerFailedAttempts++
+    val failed = stalkerFailedAttempts
+    val paused = userPausedManually
+    errorRetryJob?.cancel()
+    errorRetryJob = scope.launch {
+        _uiState.update {
+            it.copy(
+                error = null,
+                isBuffering = true,
+                showLoadingOverlay = true,
+                showPlayerLoadingStatus = true,
+                loadingMessage = context.getString(R.string.livetv_channel_loading),
+                showPauseOverlay = false,
+            )
+        }
+        releasePlayer(flushPlaybackState = false)
+        mpvErrorRecoveryArmed = false
+        val ready = try {
+            refresh(status, failed)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            showStalkerBusy(error.message)
+            return@launch
+        }
+        if (ready == null || ready.url.isBlank()) {
+            showStalkerBusy(null)
+            return@launch
+        }
+        currentStreamUrl = ready.url
+        currentHeaders = ready.headers
+        currentStreamMimeType = null
+        savedStateHandle["streamUrl"] = ready.url
+        savedStateHandle["headers"] = URLEncoder.encode(JSONObject(ready.headers).toString(), "UTF-8").replace("+", "%20")
+        reinitializeCurrentStream(startPaused = paused)
+    }
+    return true
+}
+
+private fun PlayerRuntimeController.showStalkerBusy(detail: String?) {
+    _uiState.update {
+        it.copy(
+            error = context.getString(R.string.livetv_portal_busy).let { busy ->
+                if (detail.isNullOrBlank() || detail == busy) busy else detail
+            },
+            showLoadingOverlay = false,
+            isBuffering = false,
+            showPauseOverlay = false,
+        )
+    }
 }
 
 internal fun PlayerRuntimeController.showRecoveryOverlay() {

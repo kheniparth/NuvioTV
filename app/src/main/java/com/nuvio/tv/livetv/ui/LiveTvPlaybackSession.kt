@@ -5,7 +5,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.SavedStateHandle
 import com.nuvio.tv.livetv.data.LiveTvChannel
+import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -81,20 +83,38 @@ class LiveTvPlaybackSession @Inject constructor(
 
     fun consumePending(): LiveTvPlayRequest? = pending.also { pending = null }
 
-    suspend fun playable(channel: LiveTvChannel): LiveTvPlayRequest {
+    fun currentIsStalker(): Boolean =
+        channels.find { it.id == currentId }?.stalkerCommand?.isNotBlank() == true
+
+    suspend fun playable(
+        channel: LiveTvChannel,
+        releasePlayer: suspend () -> Unit = {},
+    ): LiveTvPlayRequest {
         pending = null
-        // The provider allows one stream, so the preview must be fully closed before this one opens.
-        previewPlayer.stop()
-        val resolved = repository.resolvePlayableUrl(channel)
+        // Release the full player and the preview, and wait for that, before create_link.
+        val resolved = repository.openChannel(channel, StalkerStage.Zap) {
+            releasePlayer()
+            previewPlayer.stop()
+        }
         if (resolved.url.isBlank()) error("No stream URL")
         repository.recordRecent(channel.id)
-        return LiveTvPlayRequest(
-            streamUrl = resolved.url,
-            title = channel.name,
-            headers = resolved.headers,
-            logoUrl = channel.logoUrl,
-        ).also { pending = it }
+        return requestFor(channel, resolved).also { pending = it }
     }
+
+    suspend fun refreshAfterForbidden(status: Int, failedAttempt: Int): LiveTvPlayRequest? {
+        val channel = channels.find { it.id == currentId } ?: return null
+        if (channel.stalkerCommand.isNullOrBlank()) return null
+        val resolved = repository.retryStalker(channel, status, failedAttempt) { previewPlayer.stop() }
+        if (resolved.url.isBlank()) error("No stream URL")
+        return requestFor(channel, resolved).also { pending = it }
+    }
+
+    private fun requestFor(channel: LiveTvChannel, resolved: LiveTvPlayable) = LiveTvPlayRequest(
+        streamUrl = resolved.url,
+        title = channel.name,
+        headers = resolved.headers,
+        logoUrl = channel.logoUrl,
+    )
 }
 
 @EntryPoint

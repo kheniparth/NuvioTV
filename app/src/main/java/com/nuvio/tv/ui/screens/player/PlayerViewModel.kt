@@ -1,12 +1,14 @@
 package com.nuvio.tv.ui.screens.player
 
 import com.nuvio.tv.data.repository.AddonEventDispatcher
+import com.nuvio.tv.livetv.data.StalkerPortalBusy
 import com.nuvio.tv.livetv.ui.LiveTvPlaybackSession
 import com.nuvio.tv.livetv.ui.applyResolvedLiveChannel
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.update
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
@@ -165,6 +167,23 @@ class PlayerViewModel @Inject constructor(
 
     init {
         controller.bindParty()
+        controller.liveChannelIsStalker = { livePlayback.currentIsStalker() }
+        controller.liveStalkerRefresh = { status, attempt ->
+            try {
+                val request = livePlayback.refreshAfterForbidden(status, attempt)
+                if (request == null) null else LiveStalkerReady(request.streamUrl, request.headers)
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: StalkerPortalBusy) {
+                null
+            }
+        }
+    }
+
+    fun showLiveTvError(message: String) {
+        controller._uiState.update {
+            it.copy(error = message, showLoadingOverlay = false, isBuffering = false, showPauseOverlay = false)
+        }
     }
 
     val party: com.nuvio.tv.core.party.PartyRepository

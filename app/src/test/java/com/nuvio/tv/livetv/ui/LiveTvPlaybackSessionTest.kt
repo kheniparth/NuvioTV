@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import com.nuvio.tv.ui.screens.player.PlayerNavigationArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -26,7 +27,7 @@ class LiveTvPlaybackSessionTest {
         )
         val cnn = next.copy(id = "stalker:1", name = "CNN", streamUrl = "http://cnn", stalkerCommand = null)
         val repository = mockk<LiveTvRepository> {
-            coEvery { resolvePlayableUrl(next) } returns LiveTvPlayable(
+            coEvery { openChannel(next, StalkerStage.Zap, any()) } returns LiveTvPlayable(
                 "http://play?token=a%2Fb",
                 mapOf("Authorization" to "Bearer new", "Cookie" to "timezone=Europe%2FIstanbul"),
             )
@@ -54,7 +55,7 @@ class LiveTvPlaybackSessionTest {
         assertEquals("Next", args.title)
         assertEquals("Bearer new", headers.getString("Authorization"))
         assertEquals("timezone=Europe%2FIstanbul", headers.getString("Cookie"))
-        coVerify(exactly = 1) { repository.resolvePlayableUrl(next) }
+        coVerify(exactly = 1) { repository.openChannel(next, StalkerStage.Zap, any()) }
         coVerify(exactly = 1) { repository.recordRecent("stalker:2") }
         assertNull(session.consumePending())
     }

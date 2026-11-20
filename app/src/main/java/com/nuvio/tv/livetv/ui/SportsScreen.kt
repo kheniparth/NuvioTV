@@ -43,6 +43,7 @@ import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.SportsGame
 import com.nuvio.tv.livetv.data.SportsScoreboard
 import com.nuvio.tv.livetv.data.SportsState
+import com.nuvio.tv.livetv.data.StalkerStage
 import com.nuvio.tv.livetv.data.matchSportsChannelsOnce
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -115,7 +116,7 @@ class SportsViewModel(
         }
     }
 
-    suspend fun playable(channel: LiveTvChannel) = repository.resolvePlayableUrl(channel)
+    suspend fun playable(channel: LiveTvChannel) = repository.openChannel(channel, StalkerStage.Full)
 
     private companion object {
         const val TAG = "SportsViewModel"

@@ -222,6 +222,7 @@ internal fun PlayerRuntimeController.handleMpvPlaybackError(
 
     try {
         val httpCode = mpvHttpStatusCodeFromLog()
+        if (tryLiveTvStalkerRetry(httpCode)) return
         val logLine = if (httpCode == null) {
             listOfNotNull(
                 mpvLastErrorLogLine?.takeIf { it.isNotBlank() },

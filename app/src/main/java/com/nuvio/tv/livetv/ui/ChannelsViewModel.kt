@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvCatalog
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import com.nuvio.tv.livetv.data.XmltvGuide
 import com.nuvio.tv.livetv.data.local.capLiveTvRecentChannelIds
 import com.nuvio.tv.livetv.data.nowNextFor
@@ -146,7 +147,7 @@ class ChannelsViewModel @Inject constructor(
         viewModelScope.launch {
             playing = true
             try {
-                val resolved = repository.resolvePlayableUrl(channel)
+                val resolved = repository.openChannel(channel, StalkerStage.Full)
                 if (resolved.url.isBlank()) error("No stream URL")
                 repository.recordRecent(channel.id)
                 val recents = capLiveTvRecentChannelIds(listOf(channel.id) + catalog.value.recentIds)

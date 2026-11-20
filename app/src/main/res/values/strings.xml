@@ -3570,6 +3570,8 @@
     <string name="livetv_now">%1$s</string>
     <string name="livetv_next">Next: %1$s</string>
     <string name="livetv_preview_starting">Preview starts in a moment</string>
+    <string name="livetv_channel_loading">Loading channel…</string>
+    <string name="livetv_portal_busy">The portal is busy</string>
     <string name="livetv_favourite">Favourite</string>
     <string name="livetv_unfavourite">Remove favourite</string>
     <string name="livetv_channels">Channels</string>
