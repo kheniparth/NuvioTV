@@ -533,7 +533,7 @@ private fun EpisodesListView(
     val seasonTabFocusRequester = remember { FocusRequester() }
     val sortFocusRequester = remember { FocusRequester() }
     val shownEpisodes = remember(uiState.episodes, episodeListOrder) {
-        uiState.episodes.orderedEpisodes(episodeListOrder, { it.season }, { it.episode })
+        uiState.episodes.orderedEpisodes(episodeListOrder, { it.season }, { it.episode }, { it.released })
     }
     val episodesListState = rememberLazyListState()
     var seasonTabsFocused by remember { mutableStateOf(false) }
