@@ -3600,6 +3600,7 @@
     <string name="livetv_preview_starting">Preview starts in a moment</string>
     <string name="livetv_channel_loading">Loading channel…</string>
     <string name="livetv_portal_busy">The portal is busy</string>
+    <string name="livetv_error_no_connection">No connection — check your network</string>
     <string name="livetv_favourite">Favourite</string>
     <string name="livetv_unfavourite">Remove favourite</string>
     <string name="livetv_channels">Channels</string>

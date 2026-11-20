@@ -1522,6 +1522,8 @@ internal fun PlayerRuntimeController.initializePlayer(
 
                         // A live zap can race the provider's one-stream limit; one short retry recovers it.
                         if (tryLiveTvForbiddenRetry(error)) return
+                        // Offline / DNS failures: readable error now — do not burn auto-retry or engine failover.
+                        if (tryLiveTvNetworkFailure(error)) return
 
                         // Error handlers: DV codec failures, audio decoder issues, codec state errors.
                         if (error.isDolbyVisionDecoderFailure() && !isMapDv7ToHevcActiveForCurrentPlayback) {
