@@ -42,7 +42,7 @@ import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.SportsGame
 import com.nuvio.tv.livetv.data.SportsScoreboard
 import com.nuvio.tv.livetv.data.SportsState
-import com.nuvio.tv.livetv.data.matchSportsChannels
+import com.nuvio.tv.livetv.data.matchSportsChannelsOnce
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
@@ -93,13 +93,18 @@ class SportsViewModel(
                     withContext(loadDispatcher) {
                         val games = scores.games(now)
                         val channels = repository.channels()
-                        games.map { game -> SportsRow(game, matchSportsChannels(game, channels)) }
+                        val matched = matchSportsChannelsOnce(games, channels)
+                        List(games.size) { index -> SportsRow(games[index], matched[index]) }
                     }
                 }
                 _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now)
             } catch (timeout: TimeoutCancellationException) {
                 Log.w(TAG, "Sports scores timed out after ${SPORTS_LOAD_TIMEOUT_MILLIS}ms")
-                _uiState.value = SportsUiState(loading = false, nowMillis = now)
+                _uiState.value = SportsUiState(
+                    loading = false,
+                    error = "Couldn't load scores",
+                    nowMillis = now,
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
