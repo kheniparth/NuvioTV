@@ -7,6 +7,7 @@ import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvEpgProgram
 import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import com.nuvio.tv.livetv.data.XmltvGuide
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -89,7 +90,7 @@ class ChannelsViewModelTest {
     @Test
     fun `play records the channel in recents after the url resolves`() = runTest {
         val repository = repository(catalog())
-        coEvery { repository.resolvePlayableUrl(any()) } returns
+        coEvery { repository.openChannel(any(), StalkerStage.Full, any()) } returns
             LiveTvPlayable("http://play", mapOf("User-Agent" to "VLC"))
         val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
         val plays = mutableListOf<LiveTvPlayRequest>()
@@ -102,7 +103,7 @@ class ChannelsViewModelTest {
         assertEquals("http://play", plays.single().streamUrl)
         assertEquals(mapOf("User-Agent" to "VLC"), plays.single().headers)
         coVerifyOrder {
-            repository.resolvePlayableUrl(any())
+            repository.openChannel(any(), StalkerStage.Full, any())
             repository.recordRecent("c1")
         }
         collect.cancel()
@@ -111,7 +112,7 @@ class ChannelsViewModelTest {
     @Test
     fun `a failed play does not record a recent`() = runTest {
         val repository = repository(catalog())
-        coEvery { repository.resolvePlayableUrl(any()) } throws IllegalStateException("no link")
+        coEvery { repository.openChannel(any(), StalkerStage.Full, any()) } throws IllegalStateException("no link")
         val viewModel = ChannelsViewModel(repository, LiveTvPlaybackSession(repository, mockk(relaxed = true)))
         runCurrent()
 
@@ -198,7 +199,7 @@ class ChannelsViewModelTest {
         coEvery { loadCatalog(any()) } returns catalog
         coEvery { toggleFavorite(any()) } returns Unit
         coEvery { recordRecent(any()) } returns Unit
-        coEvery { resolvePlayableUrl(any()) } returns LiveTvPlayable("http://c1", emptyMap())
+        coEvery { openChannel(any(), any(), any()) } returns LiveTvPlayable("http://c1", emptyMap())
     }
 
     private fun names(viewModel: ChannelsViewModel) = viewModel.uiState.value.rows.map { it.channel.name }

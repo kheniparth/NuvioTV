@@ -48,6 +48,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -62,6 +63,9 @@ import coil3.compose.AsyncImage
 import com.nuvio.tv.R
 import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerPortalBusy
+import com.nuvio.tv.livetv.data.StalkerStage
+import com.nuvio.tv.livetv.data.StalkerStreamGate
 import com.nuvio.tv.ui.screens.player.PlayerMediaSourceFactory
 import com.nuvio.tv.ui.screens.player.PlayerPlaybackNetworking
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -182,6 +186,7 @@ internal suspend fun previewMimeType(url: String, headers: Map<String, String>):
 @Singleton
 class LiveTvPreviewPlayer @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val stalkerGate: StalkerStreamGate,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var player: ExoPlayer? = null
@@ -191,10 +196,19 @@ class LiveTvPreviewPlayer @Inject constructor(
     val previewing: StateFlow<Boolean> = _previewing.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    private val _notice = MutableStateFlow<String?>(null)
+    val notice: StateFlow<String?> = _notice.asStateFlow()
+    var onForbidden: ((Int) -> Unit)? = null
+    var onReady: (() -> Unit)? = null
 
     internal val exoPlayer: ExoPlayer? get() = player
 
+    init {
+        stalkerGate.addReleaser { stop() }
+    }
+
     fun enterScreen() {
+        stalkerGate.allowPreview()
         sessions += 1
         releaseJob?.cancel()
         releaseJob = null
@@ -230,8 +244,21 @@ class LiveTvPreviewPlayer @Inject constructor(
         exo.prepare()
         exo.playWhenReady = true
         _error.value = null
+        _notice.value = null
         _previewing.value = true
     }
+
+    fun showNotice(message: String) {
+        _error.value = null
+        _previewing.value = false
+        _notice.value = message
+    }
+
+    fun clearNotice() {
+        _notice.value = null
+    }
+
+    fun channelLoadingLabel(): String = context.getString(R.string.livetv_channel_loading)
 
     fun stop() {
         player?.let { exo ->
@@ -248,6 +275,7 @@ class LiveTvPreviewPlayer @Inject constructor(
     fun fail(message: String, cause: Throwable? = null) {
         Log.e(LIVE_TV_PREVIEW_LOG_TAG, message, cause)
         stop()
+        _notice.value = null
         _error.value = message
     }
 
@@ -270,7 +298,17 @@ class LiveTvPreviewPlayer @Inject constructor(
             .apply {
                 volume = 0f
                 addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY) onReady?.invoke()
+                    }
+
                     override fun onPlayerError(error: PlaybackException) {
+                        val status = error.httpStatus()
+                        val handler = onForbidden
+                        if ((status == 401 || status == 403) && handler != null) {
+                            handler(status)
+                            return
+                        }
                         val detail = error.cause?.message?.takeIf { it.isNotBlank() }
                         val headline = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
                         val message = if (detail != null && detail != headline) "$headline: $detail" else headline
@@ -286,11 +324,24 @@ class LiveTvPreviewViewModel @Inject constructor(
     private val repository: LiveTvRepository,
     internal val player: LiveTvPreviewPlayer,
 ) : ViewModel() {
+    private var retryJob: Job? = null
+    private var failures = 0
+    private var played = false
+    private var previewing: LiveTvChannel? = null
     private val debounce = LiveTvPreviewDebounce(
         scope = viewModelScope,
         onStart = { channel -> startPreview(channel) },
-        onStop = { player.stop() },
+        onStop = {
+            retryJob?.cancel()
+            player.clearNotice()
+            player.stop()
+        },
     )
+
+    init {
+        player.onReady = { played = true }
+        player.onForbidden = { status -> onForbidden(status) }
+    }
 
     fun onFocus(channel: LiveTvChannel?) = debounce.focus(channel)
 
@@ -304,9 +355,39 @@ class LiveTvPreviewViewModel @Inject constructor(
         player.release()
     }
 
+    private fun onForbidden(status: Int) {
+        val channel = previewing ?: return
+        if (channel.stalkerCommand.isNullOrBlank()) {
+            player.fail("HTTP $status")
+            return
+        }
+        retryJob?.cancel()
+        retryJob = viewModelScope.launch {
+            if (played) failures = 0
+            played = false
+            failures++
+            player.showNotice(player.channelLoadingLabel())
+            try {
+                val playable = repository.retryStalker(channel, status, failures) { player.stop() }
+                currentCoroutineContext().ensureActive()
+                playResolved(playable.url, playable.headers)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (busy: StalkerPortalBusy) {
+                player.fail(busy.message ?: busy.javaClass.simpleName)
+            } catch (error: Exception) {
+                player.fail(error.message ?: error.javaClass.simpleName)
+            }
+        }
+    }
+
     private suspend fun startPreview(channel: LiveTvChannel) {
+        if (repository.stalkerPreviewBlocked()) return
+        previewing = channel
+        failures = 0
+        played = false
         val playable = try {
-            repository.resolvePlayableUrl(channel)
+            repository.openChannel(channel, StalkerStage.Preview) { player.stop() }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
@@ -314,12 +395,16 @@ class LiveTvPreviewViewModel @Inject constructor(
             return
         }
         currentCoroutineContext().ensureActive()
-        if (playable.url.isBlank()) {
+        playResolved(playable.url, playable.headers)
+    }
+
+    private suspend fun playResolved(url: String, headers: Map<String, String>) {
+        if (url.isBlank()) {
             player.fail("No stream URL")
             return
         }
         val mimeType = try {
-            previewMimeType(playable.url, playable.headers)
+            previewMimeType(url, headers)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
@@ -327,8 +412,18 @@ class LiveTvPreviewViewModel @Inject constructor(
             return
         }
         currentCoroutineContext().ensureActive()
-        player.play(playable.url, playable.headers, mimeType)
+        player.play(url, headers, mimeType)
     }
+}
+
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun PlaybackException.httpStatus(): Int? {
+    var current: Throwable? = cause
+    while (current != null) {
+        if (current is HttpDataSource.InvalidResponseCodeException) return current.responseCode
+        current = current.cause
+    }
+    return null
 }
 
 internal val LiveTvPreviewPanelWidth = 320.dp
@@ -354,6 +449,7 @@ fun LiveTvPreviewPanel(
     val player = viewModel.player
     val previewing by player.previewing.collectAsStateWithLifecycle()
     val error by player.error.collectAsStateWithLifecycle()
+    val notice by player.notice.collectAsStateWithLifecycle()
     val activity = LocalActivity.current as? LifecycleOwner
     val latestFocus by rememberUpdatedState(focusedChannel)
 
@@ -462,6 +558,7 @@ fun LiveTvPreviewPanel(
                 PreviewSurface(exo, Modifier.fillMaxSize())
             } else {
                 val message = error
+                    ?: notice
                     ?: if (focusedChannel != null) stringResource(R.string.livetv_preview_starting) else null
                 if (message != null) {
                     Text(

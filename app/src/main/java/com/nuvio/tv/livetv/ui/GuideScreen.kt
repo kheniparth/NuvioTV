@@ -65,6 +65,7 @@ import com.nuvio.tv.livetv.data.LiveTvChannel
 import com.nuvio.tv.livetv.data.LiveTvEpgProgram
 import com.nuvio.tv.livetv.data.LiveTvPlayable
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.data.StalkerStage
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -137,7 +138,7 @@ class LiveTvGuideViewModel @Inject constructor(
     }
 
     suspend fun playableFor(channel: LiveTvChannel): LiveTvPlayable? = try {
-        repository.resolvePlayableUrl(channel)
+        repository.openChannel(channel, StalkerStage.Full)
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {

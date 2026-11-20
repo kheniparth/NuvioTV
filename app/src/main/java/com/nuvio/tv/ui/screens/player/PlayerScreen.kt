@@ -12,6 +12,7 @@ import com.nuvio.tv.ui.screens.detail.formatPlaybackTime
 import com.nuvio.tv.ui.theme.NuvioMotion
 
 import com.nuvio.tv.livetv.data.LiveTvChannel
+import com.nuvio.tv.livetv.data.StalkerPortalBusy
 import com.nuvio.tv.livetv.ui.LiveTvChannelsPanel
 import com.nuvio.tv.livetv.ui.LiveTvPlayRequest
 import com.nuvio.tv.livetv.ui.LiveTvZapDebounce
@@ -253,13 +254,14 @@ fun PlayerScreen(
     val liveZapDebounce = remember(liveScope, viewModel, livePlayback) {
         LiveTvZapDebounce(scope = liveScope) { channel ->
             try {
-                // Release the playing stream before the next one opens: the source allows one stream.
-                viewModel.stopAndRelease()
-                val request = livePlayback.playable(channel)
+                // stopAndRelease runs inside playable, before create_link.
+                val request = livePlayback.playable(channel) { viewModel.stopAndRelease() }
                 livePlayback.markCurrent(channel.id)
                 onSwitchLiveChannelState(request)
             } catch (cancel: CancellationException) {
                 throw cancel
+            } catch (_: StalkerPortalBusy) {
+                viewModel.showLiveTvError(context.getString(R.string.livetv_portal_busy))
             } catch (_: Exception) {
             }
         }

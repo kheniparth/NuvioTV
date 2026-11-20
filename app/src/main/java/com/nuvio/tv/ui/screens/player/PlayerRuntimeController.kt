@@ -699,6 +699,9 @@ class PlayerRuntimeController(
     internal var pendingResumeProgress: WatchProgress? = null
     internal var hasRetriedCurrentStreamAfter416: Boolean = false
     internal var hasRetriedLiveTvForbidden: Boolean = false
+    internal var stalkerFailedAttempts: Int = 0
+    internal var liveChannelIsStalker: () -> Boolean = { false }
+    internal var liveStalkerRefresh: (suspend (status: Int, failedAttempt: Int) -> LiveStalkerReady?)? = null
     internal var isReleasingPlayer: Boolean = false
     internal var cachedDecoderPriority: Int = 1
     internal var hasTriedAudioPcmFallback: Boolean = false
