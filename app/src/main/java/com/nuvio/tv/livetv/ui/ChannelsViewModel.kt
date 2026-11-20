@@ -36,6 +36,9 @@ data class ChannelRow(
     val nowTitle: String?,
     val nextTitle: String?,
     val favorite: Boolean,
+    val nowStartMillis: Long? = null,
+    val nowEndMillis: Long? = null,
+    val nowDescription: String? = null,
 )
 
 data class LiveTvPlayRequest(
@@ -200,6 +203,9 @@ internal fun buildChannelRows(
             nowTitle = epg.now?.title,
             nextTitle = epg.next?.title,
             favorite = channel.id in favoriteIds,
+            nowStartMillis = epg.now?.startMillis,
+            nowEndMillis = epg.now?.endMillis,
+            nowDescription = epg.now?.description,
         )
     }
 }
