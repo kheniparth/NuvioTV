@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.ui
 
+import android.util.Log
 import android.view.KeyEvent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,6 +36,9 @@ data class ChannelRow(
     val nowTitle: String?,
     val nextTitle: String?,
     val favorite: Boolean,
+    val nowStartMillis: Long? = null,
+    val nowEndMillis: Long? = null,
+    val nowDescription: String? = null,
 )
 
 data class LiveTvPlayRequest(
@@ -199,6 +203,9 @@ internal fun buildChannelRows(
             nowTitle = epg.now?.title,
             nextTitle = epg.next?.title,
             favorite = channel.id in favoriteIds,
+            nowStartMillis = epg.now?.startMillis,
+            nowEndMillis = epg.now?.endMillis,
+            nowDescription = epg.now?.description,
         )
     }
 }
@@ -243,8 +250,26 @@ internal fun adjacentChannel(
     return list[nextIndex]
 }
 
-/** Down the on-screen list is next: D-pad Down, channel-down, and media-next. */
+internal const val LIVE_TV_KEYS_TAG = "LiveTvKeys"
+
+/** D-pad Down is next. CH+, Page Up, and media-next are next; their opposites are previous. */
 internal fun liveZapMovesNext(keyCode: Int): Boolean =
     keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-        keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN ||
+        keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
+        keyCode == KeyEvent.KEYCODE_PAGE_UP ||
         keyCode == KeyEvent.KEYCODE_MEDIA_NEXT
+
+/**
+ * Movie and episode chapter skip. Page keys are not chapter keys.
+ * Null means this key does not change chapter.
+ */
+internal fun vodChapterSkipForward(keyCode: Int): Boolean? = when (keyCode) {
+    KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_CHANNEL_UP -> true
+    KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_CHANNEL_DOWN -> false
+    else -> null
+}
+
+/** Info-level so a release build still shows the code in `adb logcat -s LiveTvKeys`. */
+internal fun logLiveTvKey(keyCode: Int) {
+    Log.i(LIVE_TV_KEYS_TAG, "keyCode=$keyCode ${KeyEvent.keyCodeToString(keyCode)}")
+}

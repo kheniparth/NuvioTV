@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.detail
 
 import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.domain.model.DetailImdbRatingsVisibility
+import com.nuvio.tv.domain.model.EpisodeListOrder
 import com.nuvio.tv.domain.model.EpisodeOptionsOverlayStyle
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
@@ -33,6 +34,7 @@ data class MetaDetailsUiState(
     val selectedSeason: Int = 1,
     val seasons: List<Int> = emptyList(),
     val episodesForSeason: List<Video> = emptyList(),
+    val episodeListOrder: EpisodeListOrder = EpisodeListOrder.OldestFirst,
     val isInLibrary: Boolean = false,
     val nextToWatch: NextToWatch? = null,
     val episodeProgressMap: Map<Pair<Int, Int>, WatchProgress> = emptyMap(),

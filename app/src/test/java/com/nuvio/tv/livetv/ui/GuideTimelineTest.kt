@@ -2,7 +2,6 @@ package com.nuvio.tv.livetv.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GuideTimelineTest {
@@ -71,18 +70,14 @@ class GuideTimelineTest {
     }
 
     @Test
-    fun `names stay near a quarter and the timeline keeps at least sixty percent`() {
-        assertEquals(1f, GUIDE_CATEGORY_SHARE + GUIDE_NAME_SHARE + GUIDE_TIMELINE_SHARE, 0.001f)
-        assertTrue(GUIDE_NAME_SHARE in 0.22f..0.25f)
-        assertTrue(GUIDE_TIMELINE_SHARE >= 0.60f)
-        assertEquals(4f, GUIDE_DP_PER_MINUTE, 0.001f)
-        // 1080p is 960dp. 720p is 1280dp or about 853dp. Chrome is page padding, two gaps, and the preview.
-        listOf(960, 853, 1280).forEach { screenWidth ->
-            val grid = screenWidth - 96 - 48 - 320
-            val timeline = grid * GUIDE_TIMELINE_SHARE
-            assertTrue(timeline / grid >= 0.60f)
-            assertTrue(timeline > 30f * GUIDE_DP_PER_MINUTE)
-        }
+    fun `guide columns fit a channel name on 720p and 1080p`() {
+        // 1080p is 960dp. 720p is 1280dp, or about 853dp.
+        assertEquals(178, guideCategoryWidthDp(960))
+        assertEquals(200, guideChannelColumnWidthDp(960))
+        assertEquals(180, guideCategoryWidthDp(1280))
+        assertEquals(200, guideChannelColumnWidthDp(1280))
+        assertEquals(140, guideCategoryWidthDp(853))
+        assertEquals(153, guideChannelColumnWidthDp(853))
     }
 
     @Test

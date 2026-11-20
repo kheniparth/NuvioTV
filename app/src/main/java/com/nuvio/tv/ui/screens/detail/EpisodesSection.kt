@@ -3,6 +3,8 @@ package com.nuvio.tv.ui.screens.detail
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
+import com.nuvio.tv.domain.model.EpisodeListOrder
+import com.nuvio.tv.domain.model.orderedSeasonTabs
 import com.nuvio.tv.ui.theme.NuvioPrimitives
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -158,13 +160,13 @@ fun SeasonTabs(
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     isFocusEnabled: Boolean = true,
-    posterStyle: SeasonPosterTabsStyle? = null
+    posterStyle: SeasonPosterTabsStyle? = null,
+    latestFirst: Boolean = false,
 ) {
-    // Move season 0 (specials) to the end
-    val sortedSeasons = remember(seasons) {
-        val regularSeasons = seasons.filter { it > 0 }.sorted()
-        val specials = seasons.filter { it == 0 }
-        regularSeasons + specials
+    val sortedSeasons = remember(seasons, latestFirst) {
+        seasons.orderedSeasonTabs(
+            if (latestFirst) EpisodeListOrder.LatestFirst else EpisodeListOrder.OldestFirst
+        )
     }
 
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -519,6 +521,7 @@ fun EpisodesRow(
     scrollToEpisodeId: String? = null,
     onScrollToEpisodeHandled: () -> Unit = {},
     anchorEpisodeId: String? = null,
+    listOrder: EpisodeListOrder = EpisodeListOrder.OldestFirst,
     windowResetKey: String? = null,
     ratingMedia: (Video) -> TrackingMediaReference? = { null }
 ) {
@@ -541,6 +544,12 @@ fun EpisodesRow(
         initialFirstVisibleItemIndex = initialEpisodeIndex,
         prefetchStrategy = rowPrefetchStrategy
     )
+    var appliedListOrder by remember { mutableStateOf(listOrder) }
+    LaunchedEffect(listOrder) {
+        if (appliedListOrder == listOrder) return@LaunchedEffect
+        appliedListOrder = listOrder
+        if (dedupedEpisodes.isNotEmpty()) lazyListState.scrollToItem(0)
+    }
     val episodeWindowIds = remember(dedupedEpisodes) { dedupedEpisodes.map { it.id } }
     lazyListState.keepDetailRowWindow(
         itemIds = episodeWindowIds,

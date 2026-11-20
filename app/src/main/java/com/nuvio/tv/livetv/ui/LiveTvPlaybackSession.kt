@@ -32,6 +32,10 @@ class LiveTvPlaybackSession @Inject constructor(
     var currentId: String? = null
         private set
 
+    /** Channel to focus when the list comes back from the player. Cleared once focus lands. */
+    var returnChannelId: String? = null
+        private set
+
     /** Resolved switch request. The player route can mangle this URL, so the player reads it back. */
     private var pending: LiveTvPlayRequest? = null
 
@@ -47,6 +51,15 @@ class LiveTvPlaybackSession @Inject constructor(
         this.category = category
         this.recentIds = recentIds
         this.currentId = currentId
+        this.returnChannelId = currentId
+    }
+
+    fun noteReturnChannel(id: String) {
+        returnChannelId = id
+    }
+
+    fun clearReturnChannel() {
+        returnChannelId = null
     }
 
     fun inCategory(): List<LiveTvChannel> = channelsInCategory(channels, favoriteIds, category, recentIds)
@@ -59,6 +72,7 @@ class LiveTvPlaybackSession @Inject constructor(
 
     fun markCurrent(id: String) {
         currentId = id
+        if (returnChannelId != null) returnChannelId = id
     }
 
     fun clearPending() {

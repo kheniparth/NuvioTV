@@ -135,7 +135,10 @@ import com.nuvio.tv.domain.model.resolveContentLanguage
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.TraktCommentReview
+import com.nuvio.tv.domain.model.EpisodeListOrder
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.orderedEpisodes
+import com.nuvio.tv.ui.components.EpisodeListOrderButton
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
@@ -923,6 +926,8 @@ fun MetaDetailsScreen(
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,
+                    episodeListOrder = uiState.episodeListOrder,
+                    onEpisodeListOrderSelected = viewModel::setEpisodeListOrder,
                     isInLibrary = uiState.isInLibrary,
                     librarySourceMode = uiState.librarySourceMode,
                     nextToWatch = uiState.nextToWatch,
@@ -1267,6 +1272,8 @@ private fun MetaDetailsContent(
     seasons: List<Int>,
     selectedSeason: Int,
     episodesForSeason: List<Video>,
+    episodeListOrder: EpisodeListOrder,
+    onEpisodeListOrderSelected: (EpisodeListOrder) -> Unit,
     isInLibrary: Boolean,
     librarySourceMode: LibrarySourceMode,
     nextToWatch: NextToWatch?,
@@ -1421,6 +1428,7 @@ private fun MetaDetailsContent(
         }
     }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
+    val episodeSortFocusRequester = remember { FocusRequester() }
     val heroPlayButtonFocusRequester = remember { FocusRequester() }
     var synopsisTruncated by remember(meta.id, meta.description) { mutableStateOf(false) }
     val heroPlayFocusRequester = if (synopsisTruncated) null else heroPlayButtonFocusRequester
@@ -2073,6 +2081,9 @@ private fun MetaDetailsContent(
     // Once it fires, no more auto-scrolls happen for the lifetime of this detail screen.
     var initialEpisodeScrollDone by remember(meta.id) { mutableStateOf(false) }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
+    val shownEpisodes = remember(episodesForSeason, episodeListOrder) {
+        episodesForSeason.orderedEpisodes(episodeListOrder, { it.season }, { it.episode }, { it.released })
+    }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }
         episodesForSeason.forEach { episode ->
@@ -2083,7 +2094,7 @@ private fun MetaDetailsContent(
         byEpisodeId.keys.retainAll(episodesForSeason.map { it.id }.toSet())
         byEpisodeId
     }
-    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, lastFocusedEpisodeIdBySeason[selectedSeason], nextToWatch, defaultSeriesVideo, pendingRestoreType, pendingRestoreEpisodeId) {
+    val seasonDownFocusRequester = remember(selectedSeason, shownEpisodes, seasonEpisodeFocusRequesters, lastFocusedEpisodeIdBySeason[selectedSeason], nextToWatch, defaultSeriesVideo, pendingRestoreType, pendingRestoreEpisodeId) {
         val nextEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) {
             null
         } else {
@@ -2094,7 +2105,7 @@ private fun MetaDetailsContent(
         val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
             ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
         (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
-            ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
+            ?: shownEpisodes.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
 
     val activePeopleTabFocusRequester = visiblePeopleTabItems
@@ -2504,6 +2515,7 @@ private fun MetaDetailsContent(
                             return when {
                                 name == "hero" -> heroPlayButtonFocusRequester
                                 name == "season_tabs" -> selectedSeasonFocusRequester
+                                name == "episode_sort" -> episodeSortFocusRequester
                                 name.startsWith("episodes_") ->
                                     seasonDownFocusRequester ?: selectedSeasonFocusRequester
                                 name == "cast_more_like_tabs" -> activePeopleTabFocusRequester
@@ -2640,9 +2652,34 @@ private fun MetaDetailsContent(
                             onSeasonLongPress = { seasonOptionsDialogSeason = it },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
-                            downFocusRequester = seasonDownFocusRequester,
+                            downFocusRequester = episodeSortFocusRequester,
                             isFocusEnabled = pendingRestoreType != RestoreTarget.EPISODE,
-                            posterStyle = seasonPosterStyle
+                            posterStyle = seasonPosterStyle,
+                            latestFirst = episodeListOrder == EpisodeListOrder.LatestFirst,
+                        )
+                    }
+                }
+            }
+            if (showEpisodesRow) {
+                item(key = "episode_sort", contentType = "episode_sort") {
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = NuvioTheme.spacing.xxxl,
+                            vertical = NuvioTheme.spacing.sm,
+                        )
+                    ) {
+                        EpisodeListOrderButton(
+                            order = episodeListOrder,
+                            onOrderSelected = onEpisodeListOrderSelected,
+                            focusRequester = episodeSortFocusRequester,
+                            modifier = Modifier.focusProperties {
+                                up = if (showSeasonTabs) {
+                                    selectedSeasonFocusRequester
+                                } else {
+                                    heroPlayFocusRequester ?: heroPlayButtonFocusRequester
+                                }
+                                down = seasonDownFocusRequester ?: FocusRequester.Cancel
+                            },
                         )
                     }
                 }
@@ -2660,7 +2697,7 @@ private fun MetaDetailsContent(
                     }
                     Box(modifier = Modifier.bringIntoViewResponder(episodeRowStayVerticalResponder)) {
                         EpisodesRow(
-                            episodes = episodesForSeason,
+                            episodes = shownEpisodes,
                             episodeProgressMap = episodeProgressMap,
                             episodeRatings = visibleEpisodeImdbRatings,
                             watchedEpisodes = watchedEpisodes,
@@ -2684,7 +2721,7 @@ private fun MetaDetailsContent(
                             onOpenEpisodeComments = episodeCommentsClick,
                             showOpenEpisodeComments = shouldShowCommentsSection,
                             onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
-                            upFocusRequester = if (showSeasonTabs) selectedSeasonFocusRequester else (heroPlayFocusRequester ?: heroPlayButtonFocusRequester),
+                            upFocusRequester = episodeSortFocusRequester,
                             downFocusRequester = episodesDownFocusRequester,
                             episodeFocusRequesters = seasonEpisodeFocusRequesters,
                             restoreEpisodeId = visibleEpisodeRestoreId,
@@ -2702,7 +2739,7 @@ private fun MetaDetailsContent(
                             onEpisodeFocused = { episodeId ->
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                                 if (lastDetailDpadKey == KeyEvent.KEYCODE_DPAD_UP) {
-                                    val episodeListItemIndex = 1 + if (showSeasonTabs) 1 else 0
+                                    val episodeListItemIndex = 2 + if (showSeasonTabs) 1 else 0
                                     val episodeItem = listState.layoutInfo.visibleItemsInfo
                                         .firstOrNull { it.index == episodeListItemIndex }
                                     if (episodeItem == null || episodeItem.offset < 0) {
@@ -2735,6 +2772,7 @@ private fun MetaDetailsContent(
                                 initialEpisodeScrollDone = true
                             },
                             anchorEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason],
+                            listOrder = episodeListOrder,
                             windowResetKey = meta.id,
                             ratingMedia = { video -> meta.ratingReference(video) }
                         )

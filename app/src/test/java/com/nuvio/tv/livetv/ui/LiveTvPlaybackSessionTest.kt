@@ -58,4 +58,21 @@ class LiveTvPlaybackSessionTest {
         coVerify(exactly = 1) { repository.recordRecent("stalker:2") }
         assertNull(session.consumePending())
     }
+
+    @Test
+    fun `return focus follows the channel that was playing`() {
+        val session = LiveTvPlaybackSession(mockk(relaxed = true), mockk(relaxed = true))
+        val cnn = LiveTvChannel(id = "1", name = "CNN", streamUrl = "http://cnn")
+        session.arm(listOf(cnn, cnn.copy(id = "2", name = "Next")), emptySet(), ChannelCategory.All, cnn.id)
+
+        assertEquals("1", session.returnChannelId)
+        session.markCurrent("2")
+        assertEquals("2", session.returnChannelId)
+        session.clearReturnChannel()
+        assertNull(session.returnChannelId)
+        session.markCurrent("1")
+        assertNull(session.returnChannelId)
+        session.noteReturnChannel("9")
+        assertEquals("9", session.returnChannelId)
+    }
 }

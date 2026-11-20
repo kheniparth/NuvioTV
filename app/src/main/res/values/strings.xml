@@ -188,6 +188,9 @@
     <string name="hero_synopsis_dismiss_hint">Press back to close</string>
     <string name="cd_rating">Rating</string>
 
+    <string name="episode_list_sort">Episode order</string>
+    <string name="episode_list_oldest_first">Oldest first</string>
+    <string name="episode_list_latest_first">Latest first</string>
     <string name="episodes_season">Season %1$d</string>
     <string name="episodes_specials">Specials</string>
     <string name="episodes_episode">Episode</string>

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -27,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -171,18 +172,15 @@ internal fun ModernSidebarBlurPanel(
                 )
             }
         } else {
-            // Own slot above the items. A visual offset was drawn on top of Home.
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 BrandWordmark(
                     contentDescription = stringResource(R.string.app_name),
                     modifier = Modifier
                         .fillMaxWidth(0.72f)
-                        .fillMaxHeight(),
+                        .height(36.dp),
                     alpha = sidebarLabelAlpha
                 )
             }
@@ -190,11 +188,12 @@ internal fun ModernSidebarBlurPanel(
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
+        // The logo keeps this slot. Scrolling starts below it, so Home is not drawn on top of the wordmark.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clipToBounds(),
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm - NuvioTheme.spacing.xxs),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

@@ -11,6 +11,7 @@ import com.nuvio.tv.core.poster.withCustomPosterUrls
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbMovieCollection
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.data.local.EpisodeListOrderDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.MDBListSettingsDataStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -24,6 +25,8 @@ import com.nuvio.tv.data.repository.TraktCommentsService
 import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.EpisodeListOrder
+import com.nuvio.tv.domain.model.orderedSeasonTabs
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
@@ -114,6 +117,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val simklRelatedService: com.nuvio.tv.data.simkl.SimklRelatedService,
     private val simklAuthRepository: com.nuvio.tv.data.simkl.SimklAuthRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val episodeListOrderStore: EpisodeListOrderDataStore,
     private val episodeShuffleStore: com.nuvio.tv.data.local.EpisodeShuffleStore,
     private val episodeShuffle: com.nuvio.tv.domain.model.EpisodeShuffle,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -166,6 +170,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerHandoffActive = false
     private var handoffTrailerYoutubeKey: String? = null
     private var suppressSeasonAutoSwitch = false
+    private var episodeListOrder = EpisodeListOrder.OldestFirst
 
     private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
@@ -196,6 +201,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeBlurUnwatchedEpisodes()
         observeSeasonPostersEnabled()
         observeEpisodeOptionsOverlayStyle()
+        observeEpisodeListOrder()
         observeOverallRatingsVisibility()
         observeDetailImdbRatingsVisibility()
         viewModelScope.launch {
@@ -671,6 +677,36 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun observeEpisodeListOrder() {
+        viewModelScope.launch {
+            episodeListOrderStore.order.collect { order ->
+                episodeListOrder = order
+                _uiState.update { state ->
+                    if (state.episodeListOrder == order) state else state.copy(episodeListOrder = order)
+                }
+            }
+        }
+    }
+
+    fun setEpisodeListOrder(order: EpisodeListOrder) {
+        episodeListOrder = order
+        val meta = _uiState.value.meta
+        val season = _uiState.value.seasons.orderedSeasonTabs(order).firstOrNull()
+        if (season != null) suppressSeasonAutoSwitch = true
+        _uiState.update { state ->
+            state.copy(
+                episodeListOrder = order,
+                selectedSeason = season ?: state.selectedSeason,
+                episodesForSeason = if (meta != null && season != null) {
+                    getEpisodesForSeason(meta, season)
+                } else {
+                    state.episodesForSeason
+                }
+            )
+        }
+        viewModelScope.launch { episodeListOrderStore.set(order) }
+    }
+
     private fun observeEpisodeOptionsOverlayStyle() {
         viewModelScope.launch {
             layoutPreferenceDataStore.episodeOptionsOverlayStyle
@@ -1004,8 +1040,7 @@ class MetaDetailsViewModel @Inject constructor(
         // Prefer addon-specified default episode season, otherwise first regular season (> 0), fallback to season 0 (specials)
         val selectedSeason = defaultEpisodeSeason
             ?.takeIf { it in seasons }
-            ?: seasons.firstOrNull { it > 0 }
-            ?: seasons.firstOrNull()
+            ?: seasons.orderedSeasonTabs(episodeListOrder).firstOrNull()
             ?: 1
         val episodesForSeason = getEpisodesForSeason(meta, selectedSeason)
 
@@ -1025,6 +1060,7 @@ class MetaDetailsViewModel @Inject constructor(
                 isLoading = false,
                 meta = meta,
                 seasons = seasons,
+                episodeListOrder = episodeListOrder,
                 selectedSeason = effectiveSeason,
                 episodesForSeason = effectiveEpisodes,
                 nextToWatch = effectiveNextToWatch,
@@ -1057,6 +1093,7 @@ class MetaDetailsViewModel @Inject constructor(
             contentType = enriched.apiType
         )?.resolveForMeta(enriched)
 
+        episodeListOrder = episodeListOrderStore.order.first()
         applyMeta(
             meta = withHandoffTrailer(enriched),
             initialNextToWatch = cachedNextToWatch
