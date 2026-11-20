@@ -38,6 +38,9 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
   CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
   release builds keep Live TV settings (#52). None of these has been tested together on a device yet.
+- Paperclip TEC-52: offline Live TV should no longer spin ~75 s; PR #88 (`paperclip/TEC-52-offline-error`)
+  shows "No connection — check your network" on DNS/connection failure. Waiting on emulator acceptance
+  (Private DNS `bad.invalid`).
 - Real-TV testing is on hold (owner); emulator only, TV steps are queued as owner tests.
 - Desktop fork: no Live TV work yet, last upstream sync 2026-11-17. GitHub Issues are disabled on the fork; the
   desktop work is written up as 8 briefs (D1-D8) on the Paperclip board (paperclip.kheni.site, company TechMuzz).
@@ -45,14 +48,16 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. #83 one combined release build (`:app:assembleFullRelease`) and test pass of everything merged 2026-11-19/20,
+1. TEC-52 / PR #88: tester pass on `emulator-5554` (offline readable error within ~20 s; restore DNS; 403 zap
+   not regressed), then a senior who did not author the change merges and hands docs to Documentor.
+2. #83 one combined release build (`:app:assembleFullRelease`) and test pass of everything merged 2026-11-19/20,
    emulator now, Chromecast steps queued. Failures become new bug issues.
-2. #85 TMDB_API_KEY missing from `~/nuvio/factory/NuvioTV.local.properties` (owner adds the key; agents add the
+3. #85 TMDB_API_KEY missing from `~/nuvio/factory/NuvioTV.local.properties` (owner adds the key; agents add the
    missing-key warning/failure).
-3. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
-4. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
+4. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
+5. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
-5. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
+6. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
    D2 data layer + desktop storage, D3 settings page, D4 Channels + nav + libmpv playback with headers,
    D5 Guide/Sports/On Demand, D6 in-player channel switching, D7 bootstrap + Windows packaging,
    D8 macOS arm64 build in CI. Do not merge Enhanced into it (~1,050 compile errors). Bring the TV fixes over
