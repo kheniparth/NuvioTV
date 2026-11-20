@@ -2082,7 +2082,7 @@ private fun MetaDetailsContent(
     var initialEpisodeScrollDone by remember(meta.id) { mutableStateOf(false) }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
     val shownEpisodes = remember(episodesForSeason, episodeListOrder) {
-        episodesForSeason.orderedEpisodes(episodeListOrder, { it.season }, { it.episode })
+        episodesForSeason.orderedEpisodes(episodeListOrder, { it.season }, { it.episode }, { it.released })
     }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }

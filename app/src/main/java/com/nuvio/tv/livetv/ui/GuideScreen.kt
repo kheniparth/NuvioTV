@@ -482,7 +482,8 @@ private fun GuideProgrammeCell(
                 text = programme.title,
                 style = MaterialTheme.typography.labelMedium,
                 color = NuvioTheme.colors.TextPrimary,
-                maxLines = 2,
+                maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
