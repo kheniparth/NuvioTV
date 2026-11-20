@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -75,13 +76,17 @@ import com.nuvio.tv.livetv.data.LiveTvVodKind
 import com.nuvio.tv.livetv.data.LiveTvVodPlayback
 import com.nuvio.tv.livetv.data.filterLiveTvVodItems
 import com.nuvio.tv.ui.components.GridContentCard
+import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.LocalLandscapePosterMode
+import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
 import com.nuvio.tv.domain.model.orderedEpisodes
 import com.nuvio.tv.domain.model.orderedSeasonTabs
 import com.nuvio.tv.ui.components.EpisodeListOrderButton
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.dpadRepeatThrottle
+import com.nuvio.tv.ui.util.asStable
 import kotlinx.coroutines.launch
 
 private const val VOD_ALL = "all"
@@ -105,6 +110,7 @@ fun OnDemandScreen(
     val context = LocalContext.current
     val focus = rememberLiveTvColumnFocus()
     val gridState = rememberLazyGridState()
+    var focusedId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(selectedSeries?.id) { selectedSeries?.let(viewModel::loadEpisodes) }
 
@@ -127,6 +133,10 @@ fun OnDemandScreen(
         }
     }
 
+    fun openVod(item: LiveTvVodItem) {
+        if (item.kind == LiveTvVodKind.Series) selectedSeries = item else startPlayback { viewModel.playback(item) }
+    }
+
     val visibleItems = remember(catalog.items, selectedCategoryId, searchQuery, favoritesOnly, uiState.favoriteIds) {
         filterLiveTvVodItems(catalog.items, selectedCategoryId, searchQuery)
             .filter { item -> !favoritesOnly || item.id in uiState.favoriteIds }
@@ -142,6 +152,8 @@ fun OnDemandScreen(
     ) + catalog.categories.map { LiveTvCategoryEntry(VOD_CATEGORY + it.id, it.name) }
     val visibleKeys = gridState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
     val restoreId = focus.restoreKey(selectedKey, visibleKeys) ?: visibleItems.firstOrNull()?.id
+    val heroItem = visibleItems.firstOrNull { it.id == focusedId } ?: visibleItems.firstOrNull()
+    val posterCardStyle = PosterCardDefaults.Style
 
     Row(
         modifier = Modifier
@@ -214,6 +226,15 @@ fun OnDemandScreen(
 
         Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
 
+        if (selectedSeries == null && heroItem != null) {
+            HeroCarousel(
+                items = listOf(heroItem.toMetaPreview()).asStable(),
+                onItemClick = { openVod(heroItem) },
+                modifier = Modifier.focusProperties { canFocus = false },
+                showBackdrop = true,
+            )
+        }
+
         Box(modifier = Modifier.weight(1f)) {
             val series = selectedSeries
             when {
@@ -260,7 +281,9 @@ fun OnDemandScreen(
                 )
 
                 else -> LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
+                    columns = GridCells.Adaptive(
+                        minSize = if (LocalLandscapePosterMode.current) posterCardStyle.height else posterCardStyle.width,
+                    ),
                     state = gridState,
                     modifier = Modifier
                         .fillMaxSize()
@@ -273,17 +296,16 @@ fun OnDemandScreen(
                         Box {
                             GridContentCard(
                                 item = item.toMetaPreview(),
+                                posterCardStyle = posterCardStyle,
+                                showLabel = true,
                                 showReleaseInfo = item.year != null,
                                 focusRequester = focus.listRequester.takeIf { item.id == restoreId },
-                                onFocused = { focus.onListItemFocused(selectedKey, item.id) },
-                                onLongPress = { viewModel.toggleFavorite(item.id) },
-                                onClick = {
-                                    if (item.kind == LiveTvVodKind.Series) {
-                                        selectedSeries = item
-                                    } else {
-                                        startPlayback { viewModel.playback(item) }
-                                    }
+                                onFocused = {
+                                    focusedId = item.id
+                                    focus.onListItemFocused(selectedKey, item.id)
                                 },
+                                onLongPress = { viewModel.toggleFavorite(item.id) },
+                                onClick = { openVod(item) },
                             )
                             if (item.id in uiState.favoriteIds) {
                                 Box(
@@ -582,7 +604,7 @@ private fun LiveTvVodItem.toMetaPreview() = MetaPreview(
     name = name,
     poster = posterUrl,
     posterShape = PosterShape.POSTER,
-    background = null,
+    background = posterUrl,
     logo = null,
     description = plot,
     releaseInfo = year,

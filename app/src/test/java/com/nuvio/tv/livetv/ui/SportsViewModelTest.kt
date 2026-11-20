@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -35,7 +34,7 @@ class SportsViewModelTest {
         runCurrent()
 
         assertFalse(viewModel.uiState.value.loading)
-        assertNull(viewModel.uiState.value.error)
+        assertEquals("Couldn't load scores", viewModel.uiState.value.error)
         assertTrue(viewModel.uiState.value.rows.isEmpty())
     }
 

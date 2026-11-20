@@ -1,7 +1,14 @@
 package com.nuvio.tv.livetv.data
 
 import java.time.Instant
+import kotlin.system.measureTimeMillis
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SportsMatchTest {
@@ -134,6 +141,31 @@ class SportsMatchTest {
             listOf(SportsLeague("24707", "SL in PAK", "cricket/24707")),
             parseCricketHeader(header),
         )
+    }
+
+    @Test
+    fun `five hundred games against six thousand channels finish quickly and stop when cancelled`() = runBlocking {
+        val channels = List(6_000) { index ->
+            LiveTvChannel(id = "c$index", name = "Guide $index HD", streamUrl = "http://x/$index")
+        }
+        val games = List(500) { index ->
+            game("nba", "NBA", side("Zebras $index", "Zebras", "ZEB"), side("Yaks $index", "Yaks", "YAK"))
+                .copy(id = "g$index")
+        }
+        val elapsed = measureTimeMillis { matchSportsChannelsOnce(games, channels) }
+        assertTrue("matching took ${elapsed}ms", elapsed < 2_000)
+
+        var cancelled = false
+        val job = launch(Dispatchers.Default) {
+            coroutineContext[Job]?.cancel()
+            try {
+                matchSportsChannelsOnce(games, channels)
+            } catch (expected: CancellationException) {
+                cancelled = true
+            }
+        }
+        job.join()
+        assertTrue(cancelled)
     }
 
     private fun names(game: SportsGame, channelNames: List<String>) =

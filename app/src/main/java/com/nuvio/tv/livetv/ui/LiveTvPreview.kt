@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LiveTv
@@ -333,16 +334,21 @@ class LiveTvPreviewViewModel @Inject constructor(
 internal val LiveTvPreviewPanelWidth = 320.dp
 
 /**
- * Always-visible preview beside the list: the focused channel's name at once, then muted video.
- * Not focusable, so the D-pad stays in the list.
+ * Hero above the list: channel details on the left, the one shared muted preview on the right.
+ * Not focusable, so the D-pad stays in the list. [focusedChannel] drives playback;
+ * [displayChannel] is the text when nothing is focused yet.
  */
 @Composable
 fun LiveTvPreviewPanel(
     focusedChannel: LiveTvChannel?,
     scrollInProgress: Boolean,
     modifier: Modifier = Modifier,
+    displayChannel: LiveTvChannel? = focusedChannel,
     nowTitle: String? = null,
     nextTitle: String? = null,
+    timeRange: String? = null,
+    description: String? = null,
+    live: Boolean = false,
     viewModel: LiveTvPreviewViewModel = hiltViewModel(),
 ) {
     val player = viewModel.player
@@ -376,10 +382,76 @@ fun LiveTvPreviewPanel(
         if (scrollInProgress) viewModel.onScroll() else viewModel.onFocus(focusedChannel)
     }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            displayChannel?.let { channel ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChannelLogo(channel)
+                    Text(
+                        text = channel.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = NuvioTheme.colors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (!nowTitle.isNullOrBlank()) {
+                Text(
+                    text = nowTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioTheme.colors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!timeRange.isNullOrBlank()) {
+                Text(
+                    text = timeRange,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 1,
+                )
+            }
+            if (live) {
+                Text(
+                    text = stringResource(R.string.livetv_sports_live),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = NuvioTheme.colors.Primary,
+                )
+            }
+            if (!description.isNullOrBlank()) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!nextTitle.isNullOrBlank()) {
+                Text(
+                    text = stringResource(R.string.livetv_next, nextTitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .width(LiveTvPreviewPanelWidth)
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.Black),
@@ -401,33 +473,6 @@ fun LiveTvPreviewPanel(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                }
-            }
-        }
-        focusedChannel?.let { channel ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ChannelLogo(channel)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = channel.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioTheme.colors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val guide = guideLine(nowTitle, nextTitle)
-                    if (guide != null) {
-                        Text(
-                            text = guide,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.colors.TextSecondary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
@@ -488,12 +533,4 @@ internal fun ChannelLogo(channel: LiveTvChannel) {
             contentScale = ContentScale.Crop,
         )
     }
-}
-
-@Composable
-internal fun guideLine(nowTitle: String?, nextTitle: String?): String? = when {
-    nowTitle != null && nextTitle != null -> stringResource(R.string.livetv_now_next, nowTitle, nextTitle)
-    nowTitle != null -> stringResource(R.string.livetv_now, nowTitle)
-    nextTitle != null -> stringResource(R.string.livetv_next, nextTitle)
-    else -> null
 }
