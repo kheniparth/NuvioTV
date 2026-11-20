@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +44,34 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.flow.first
 
 internal const val LIVE_TV_CATEGORY_FOCUS_DELAY_MILLIS = 300L
+
+/**
+ * After the player closes, focus the channel that was playing.
+ * [rowIndex] is -1 until that channel is in the list. [onDone] clears the pending id.
+ */
+@Composable
+internal fun LiveTvRestorePlayedChannel(
+    channelId: String?,
+    rowIndex: Int,
+    listReady: Boolean,
+    listState: LazyListState,
+    focus: LiveTvColumnFocus,
+    onDone: () -> Unit,
+) {
+    LaunchedEffect(channelId, rowIndex, listReady) {
+        if (channelId == null || !listReady) return@LaunchedEffect
+        if (rowIndex < 0) {
+            onDone()
+            focus.focusCategory()
+            return@LaunchedEffect
+        }
+        listState.scrollToItem(rowIndex)
+        repeat(2) { withFrameNanos { } }
+        val focused = focus.focusListItem()
+        onDone()
+        if (!focused) focus.focusCategory()
+    }
+}
 
 data class LiveTvCategoryEntry(val key: String, val label: String)
 
@@ -124,6 +153,7 @@ internal fun LiveTvCategoryColumn(
     onSelect: (String) -> Unit,
     focus: LiveTvColumnFocus,
     modifier: Modifier = Modifier,
+    focusCategoryOnEnter: Boolean = true,
     header: @Composable (() -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
@@ -136,7 +166,8 @@ internal fun LiveTvCategoryColumn(
         if (key != selectedKey) onSelect(key)
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(focusCategoryOnEnter) {
+        if (!focusCategoryOnEnter) return@LaunchedEffect
         snapshotFlow { entries.isNotEmpty() }.first { it }
         focus.focusCategory()
     }
@@ -221,7 +252,8 @@ private fun CategoryEntry(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             style = MaterialTheme.typography.labelLarge,
             color = NuvioTheme.colors.TextPrimary,
-            maxLines = 2,
+            maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
     }

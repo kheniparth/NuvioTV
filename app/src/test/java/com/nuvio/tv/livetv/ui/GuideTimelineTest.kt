@@ -70,6 +70,17 @@ class GuideTimelineTest {
     }
 
     @Test
+    fun `guide columns fit a channel name on 720p and 1080p`() {
+        // 1080p is 960dp. 720p is 1280dp, or about 853dp.
+        assertEquals(178, guideCategoryWidthDp(960))
+        assertEquals(200, guideChannelColumnWidthDp(960))
+        assertEquals(180, guideCategoryWidthDp(1280))
+        assertEquals(200, guideChannelColumnWidthDp(1280))
+        assertEquals(140, guideCategoryWidthDp(853))
+        assertEquals(153, guideChannelColumnWidthDp(853))
+    }
+
+    @Test
     fun `window starts one slot before the current slot`() {
         val now = 12L * 60L * 60_000L + 10L * 60_000L
 
