@@ -1,7 +1,7 @@
 package com.nuvio.tv.livetv.ui
 
 import android.util.Log
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,8 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -21,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -32,9 +32,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.livetv.data.LiveTvChannel
@@ -42,7 +43,7 @@ import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.SportsGame
 import com.nuvio.tv.livetv.data.SportsScoreboard
 import com.nuvio.tv.livetv.data.SportsState
-import com.nuvio.tv.livetv.data.matchSportsChannels
+import com.nuvio.tv.livetv.data.matchSportsChannelsOnce
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
@@ -93,13 +94,18 @@ class SportsViewModel(
                     withContext(loadDispatcher) {
                         val games = scores.games(now)
                         val channels = repository.channels()
-                        games.map { game -> SportsRow(game, matchSportsChannels(game, channels)) }
+                        val matched = matchSportsChannelsOnce(games, channels)
+                        List(games.size) { index -> SportsRow(games[index], matched[index]) }
                     }
                 }
                 _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now)
             } catch (timeout: TimeoutCancellationException) {
                 Log.w(TAG, "Sports scores timed out after ${SPORTS_LOAD_TIMEOUT_MILLIS}ms")
-                _uiState.value = SportsUiState(loading = false, nowMillis = now)
+                _uiState.value = SportsUiState(
+                    loading = false,
+                    error = "Couldn't load scores",
+                    nowMillis = now,
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -131,6 +137,8 @@ fun SportsScreen(
     val listState = rememberLazyListState()
     val previewViewModel: LiveTvPreviewViewModel = hiltViewModel()
     val focus = rememberLiveTvColumnFocus()
+    val playback = rememberLiveTvPlayback()
+    val returnId = remember { playback.returnChannelId }
     LiveTvColumnBack(focus, onLeave = onBackPress)
     val allLabel = stringResource(R.string.livetv_category_all)
     var selectedLeague by rememberSaveable { mutableStateOf(SPORTS_ALL_KEY) }
@@ -146,10 +154,24 @@ fun SportsScreen(
     val visibleChannelIds = games
         .filter { "${it.game.leagueId}:${it.game.id}" in visibleGameKeys }
         .flatMap { row -> row.channels.map { it.id } }
-    val restoreChannelId = focus.restoreKey(selectedLeague, visibleChannelIds)
+    val returnGameIndex = if (returnId == null) -1 else games.indexOfFirst { row -> row.channels.any { it.id == returnId } }
+    val restoreChannelId = returnId?.takeIf { returnGameIndex >= 0 }
+        ?: focus.restoreKey(selectedLeague, visibleChannelIds)
         ?: games.firstNotNullOfOrNull { it.channels.firstOrNull()?.id }
+    LiveTvRestorePlayedChannel(
+        channelId = returnId,
+        rowIndex = returnGameIndex,
+        listReady = games.isNotEmpty() || !state.loading,
+        listState = listState,
+        focus = focus,
+        onDone = playback::clearReturnChannel,
+    )
     val restoreGameKey = games.firstOrNull { row -> row.channels.any { it.id == restoreChannelId } }
         ?.let { "${it.game.leagueId}:${it.game.id}" }
+    val previewGame = games.firstOrNull { row -> row.channels.any { it.id == previewChannel?.id } }?.game
+        ?: games.firstOrNull { it.channels.isNotEmpty() }?.game
+    val displayChannel = previewChannel
+        ?: games.firstNotNullOfOrNull { it.channels.firstOrNull() }
 
     Row(
         modifier = Modifier
@@ -162,17 +184,30 @@ fun SportsScreen(
             selectedKey = selectedLeague,
             onSelect = { selectedLeague = it },
             focus = focus,
-            modifier = Modifier.weight(0.2f),
+            focusCategoryOnEnter = returnId == null,
+            modifier = Modifier.weight(0.22f),
         )
         Column(
             modifier = Modifier
-                .weight(0.8f)
+                .weight(0.78f)
                 .fillMaxHeight()
                 .liveTvReturnToCategories(focus),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (displayChannel != null) {
+                LiveTvPreviewPanel(
+                    focusedChannel = previewChannel,
+                    displayChannel = displayChannel,
+                    nowTitle = previewGame?.name,
+                    description = previewGame?.statusDetail?.takeIf { it.isNotBlank() },
+                    live = previewGame?.state == SportsState.Live,
+                    scrollInProgress = listState.isScrollInProgress,
+                    viewModel = previewViewModel,
+                )
+            }
             Text(
-                text = stringResource(R.string.livetv_sports_title),
+                text = leagues.firstOrNull { it.key == selectedLeague }?.label
+                    ?: stringResource(R.string.livetv_sports_title),
                 style = NuvioTheme.textStyles.headline,
                 color = NuvioTheme.colors.TextPrimary,
             )
@@ -203,6 +238,7 @@ fun SportsScreen(
                                 scope.launch {
                                     try {
                                         val playable = viewModel.playable(channel)
+                                        playback.noteReturnChannel(channel.id)
                                         onPlay(playable.url, playable.headers, channel.name)
                                     } catch (error: CancellationException) {
                                         throw error
@@ -221,12 +257,6 @@ fun SportsScreen(
                 }
             }
         }
-        LiveTvPreviewPanel(
-            focusedChannel = previewChannel,
-            scrollInProgress = listState.isScrollInProgress,
-            modifier = Modifier.width(LiveTvPreviewPanelWidth),
-            viewModel = previewViewModel,
-        )
     }
 }
 
@@ -283,13 +313,11 @@ private fun SportsGameBlock(
                 )
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.channels.forEach { channel ->
-                    Button(
-                        onClick = { onChannel(channel) },
+                    SportsChannelCard(
+                        channel = channel,
+                        programme = game.name,
                         modifier = Modifier
                             .then(
                                 if (restoreFocus && channel.id == restoreChannelId) {
@@ -299,14 +327,62 @@ private fun SportsGameBlock(
                                 },
                             )
                             .onFocusChanged { onChannelFocus(channel, it.isFocused) },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioTheme.colors.BackgroundCard,
-                            contentColor = NuvioTheme.colors.TextPrimary,
-                        ),
-                    ) {
-                        Text(text = channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                        onClick = { onChannel(channel) },
+                    )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SportsChannelCard(
+    channel: LiveTvChannel,
+    programme: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = ClickableSurfaceDefaults.shape(shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NuvioTheme.colors.BackgroundCard,
+            focusedContainerColor = NuvioTheme.colors.BackgroundElevated,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border),
+                shape = shape,
+            ),
+            focusedBorder = Border(
+                border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                shape = shape,
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ChannelLogo(channel)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = channel.name,
+                    color = NuvioTheme.colors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = programme,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

@@ -6,10 +6,12 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import javax.inject.Inject
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -176,7 +178,7 @@ internal fun parseCricketHeader(payload: String): List<SportsLeague> {
 
 internal fun normalizeSportsName(value: String): String =
     value.lowercase()
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .replace(sportsNameSeparators, " ")
         .split(' ')
         .filter { it.isNotBlank() && it !in channelNoiseTokens }
         .joinToString(" ")
@@ -184,30 +186,56 @@ internal fun normalizeSportsName(value: String): String =
 /**
  * Channels named for both teams (full name, short name, or abbreviation) rank first,
  * then channels whose name is one of the broadcaster names.
+ * Channel names are normalized once per call so a long guide does not redo that work per game.
  */
+internal suspend fun matchSportsChannelsOnce(
+    games: List<SportsGame>,
+    channels: List<LiveTvChannel>,
+    limit: Int = 8,
+): List<List<LiveTvChannel>> {
+    val prepared = ArrayList<Pair<LiveTvChannel, String>>(channels.size)
+    for (channel in channels) {
+        coroutineContext.ensureActive()
+        prepared.add(channel to normalizeSportsName(channel.name))
+    }
+    return games.map { game ->
+        coroutineContext.ensureActive()
+        matchPreparedSportsChannels(game, prepared, limit)
+    }
+}
+
 internal fun matchSportsChannels(
     game: SportsGame,
     channels: List<LiveTvChannel>,
     limit: Int = 8,
+): List<LiveTvChannel> = matchPreparedSportsChannels(
+    game,
+    channels.map { it to normalizeSportsName(it.name) },
+    limit,
+)
+
+private fun matchPreparedSportsChannels(
+    game: SportsGame,
+    channels: List<Pair<LiveTvChannel, String>>,
+    limit: Int,
 ): List<LiveTvChannel> {
     val teamKeys = game.sides.map(::sportsTeamKeys).filter { it.isNotEmpty() }
     val broadcastKeys = game.broadcasts.map(::normalizeSportsName).filter { it.length >= 3 }
     if (teamKeys.size < 2 && broadcastKeys.isEmpty()) return emptyList()
-    return channels.map { it to normalizeSportsName(it.name) }
-        .mapNotNull { (channel, normalized) ->
-            if (normalized.isEmpty()) return@mapNotNull null
-            val padded = " $normalized "
-            val bothTeams = teamKeys.size >= 2 && teamKeys.all { keys ->
-                keys.any { padded.contains(" $it ") }
-            }
-            val score = when {
-                bothTeams -> 3
-                broadcastKeys.any { it == normalized } -> 2
-                broadcastKeys.any { padded.contains(" $it ") } -> 1
-                else -> 0
-            }
-            if (score == 0) null else channel to score
+    return channels.mapNotNull { (channel, normalized) ->
+        if (normalized.isEmpty()) return@mapNotNull null
+        val padded = " $normalized "
+        val bothTeams = teamKeys.size >= 2 && teamKeys.all { keys ->
+            keys.any { padded.contains(" $it ") }
         }
+        val score = when {
+            bothTeams -> 3
+            broadcastKeys.any { it == normalized } -> 2
+            broadcastKeys.any { padded.contains(" $it ") } -> 1
+            else -> 0
+        }
+        if (score == 0) null else channel to score
+    }
         .sortedWith(compareByDescending<Pair<LiveTvChannel, Int>> { it.second }.thenBy { it.first.name.length })
         .take(limit)
         .map { it.first }
@@ -285,6 +313,8 @@ private fun JsonObject.array(key: String): List<JsonObject> =
     (this[key] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
 
 private val sportsJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+private val sportsNameSeparators = Regex("[^\\p{L}\\p{N}]+")
 
 private val ESPN_DATE = Regex("""(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?""")
 
