@@ -19,14 +19,14 @@ flowchart TD
     F2 -- yes --> PICK[Intent label to role to worker<br/>workers.json, skips frozen and peak-priced workers]
     PICK -->|architect| A[Claude Opus / Sonnet 5.5<br/>or Cursor high effort]
     PICK -->|implement| I[Cursor medium effort<br/>or DeepSeek flash]
-    PICK -->|review| V[Cursor high effort or DeepSeek flash<br/>never the PR's author]
+    PICK -->|review| V[Claude test-and-merge run<br/>reruns checks + acceptance test<br/>never the PR's author]
     A --> W
     I --> W
     W[Worker follows its task:<br/>issue, PR, review comments, CI] --> PR[Pull request]
     PR --> V
-    V -- changes requested --> W
-    V -- approved + checks pass --> M[Merge]
-    V -- needs hardware or a decision --> H[Owner: review / test]
+    V -- tests fail: Changes requested --> W
+    V -- tests pass --> M[Merge by the test run]
+    V -- needs hardware or a decision --> H[Owner: decide / hand-test]
     H --> M
     M --> D[Done: issue closed, worktree removed]
     UI[Web UI: status, freeze, history, cost] -. reads state / writes FREEZE files .-> R
@@ -46,7 +46,7 @@ A worker can also freeze itself on a schedule: DeepSeek is frozen automatically 
 | implement | Cursor, medium effort | DeepSeek flash |
 | review | Cursor, high effort | DeepSeek flash, then Claude Sonnet |
 
-A reviewer is never the worker that wrote the PR. Frozen workers are skipped, so the next in the list takes the job. The table lives in `workers.json`.
+There is no code review step. The worker runs the checks before it opens a PR; the Claude run is the tester: it reruns the checks and the acceptance test on the merged commit and merges what passes. The tester is never the worker that wrote the PR. The `review` label and role names stay because the scripts use them. Frozen workers are skipped, so the next in the list takes the job. The table lives in `workers.json`.
 
 ## Migration from `tick`
 
