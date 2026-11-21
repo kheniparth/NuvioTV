@@ -5,3 +5,4 @@ TraktAuthServiceTest > refresh token server error keeps credentials and allows a
 SearchViewModelSuggestionsTest > clearing the field retires the suggestions and the submitted query
 # Flaky upstream (fails on some runs):
 TraktProgressServiceFailureTest > failed dropped-shows fetch keeps shows hidden from progress
+ContinueWatchingAiringRulesTest > watchableEpisodes excludes future mid-season episodes so checkmark can apply
