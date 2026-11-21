@@ -32,6 +32,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 
 - 2026-11-18/20: Follow-up fixes merged: #59, #64, #70-#75, #79-#82 (see Current state). Remaining work
   filed as #83-#85 and desktop briefs D1-D8; queued on Paperclip.
+- 2026-11-20: #85 TMDB key done: Parth added `TMDB_API_KEY` to the factory props; agents added a missing-key
+  guard in `app/build.gradle.kts` (PR #90, merged `56d94fb8e`).
 
 ## Current state (2026-11-20)
 - TV fork `dev` has the full Live TV feature plus every fix filed so far. All Live TV issues through #82 are closed:
@@ -41,6 +43,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 - Paperclip TEC-52: offline Live TV should no longer spin ~75 s; PR #88 (`paperclip/TEC-52-offline-error`)
   shows "No connection — check your network" on DNS/connection failure. Waiting on emulator acceptance
   (Private DNS `bad.invalid`).
+- #85 TMDB key closed: the factory props now have `TMDB_API_KEY`, and a missing or blank key warns
+  `TMDB_API_KEY missing: metadata will not load` on debug while `:app:assembleFullRelease` fails (PR #90).
 - Real-TV testing is on hold (owner); emulator only, TV steps are queued as owner tests.
 - Desktop fork: no Live TV work yet, last upstream sync 2026-11-17. GitHub Issues are disabled on the fork; the
   desktop work is written up as 8 briefs (D1-D8) on the Paperclip board (paperclip.kheni.site, company TechMuzz).
@@ -50,14 +54,13 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 ## Next steps
 1. TEC-52 / PR #88: tester pass on `emulator-5554` (offline readable error within ~20 s; restore DNS; 403 zap
    not regressed), then a senior who did not author the change merges and hands docs to Documentor.
-2. #83 one combined release build (`:app:assembleFullRelease`) and test pass of everything merged 2026-11-19/20,
-   emulator now, Chromecast steps queued. Failures become new bug issues.
-3. #85 TMDB_API_KEY missing from `~/nuvio/factory/NuvioTV.local.properties` (owner adds the key; agents add the
-   missing-key warning/failure).
-4. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
-5. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
+2. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
+   `local.properties`) and test pass of everything merged 2026-11-19/20, emulator now, Chromecast steps queued.
+   Failures become new bug issues.
+3. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
+4. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
-6. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
+5. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
    D2 data layer + desktop storage, D3 settings page, D4 Channels + nav + libmpv playback with headers,
    D5 Guide/Sports/On Demand, D6 in-player channel switching, D7 bootstrap + Windows packaging,
    D8 macOS arm64 build in CI. Do not merge Enhanced into it (~1,050 compile errors). Bring the TV fixes over
@@ -66,6 +69,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 ## How to build and test (TV)
 - Checks: `bash .factory/build.sh` (Gradle in WSL on a native-disk copy: `:app:assembleFullDebug
   :app:testFullDebugUnitTest`). One Gradle build needs ~13 GB of WSL's ~23 GB: never run two at once.
+- `:app:assembleFullRelease` fails with `TMDB_API_KEY missing: metadata will not load` when the key is absent or
+  blank; debug builds only warn and still run.
 - Debuggable APK for bootstrap/run-as: build with `-Pdebuggable=true`. Package `com.nuviodebug.com`.
 - adb: WSL `~/Android/Sdk/platform-tools/adb` only.
 - Devices: Android TV emulator in WSL (AVD `nuvio_tv`, `emulator-5554`, run it as a long-lived background job);
