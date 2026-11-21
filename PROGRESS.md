@@ -40,9 +40,10 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
   CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
   release builds keep Live TV settings (#52). None of these has been tested together on a device yet.
-- Paperclip TEC-52: offline Live TV should no longer spin ~75 s; PR #88 (`paperclip/TEC-52-offline-error`)
-  shows "No connection — check your network" on DNS/connection failure. Waiting on emulator acceptance
-  (Private DNS `bad.invalid`).
+- Paperclip TEC-52: PR #88 merged (offline message on DNS failure), but acceptance timed out at 37–38 s
+  because ExoPlayer still retried loads ~6×. Follow-up `paperclip/TEC-52-offline-failfast` fails the load
+  on the first UnknownHost/ConnectException so the message can appear within ~20 s; awaiting Tester3.
+
 - #85 TMDB key closed: the factory props now have `TMDB_API_KEY`, and a missing or blank key warns
   `TMDB_API_KEY missing: metadata will not load` on debug while `:app:assembleFullRelease` fails (PR #90).
 - Real-TV testing is on hold (owner); emulator only, TV steps are queued as owner tests.
@@ -52,8 +53,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. TEC-52 / PR #88: tester pass on `emulator-5554` (offline readable error within ~20 s; restore DNS; 403 zap
-   not regressed), then a senior who did not author the change merges and hands docs to Documentor.
+1. TEC-52 fail-fast PR: Tester3 acceptance on `emulator-5554` (offline readable error within ~20 s; restore
+   DNS; 403 zap not regressed), then a senior who did not author the change merges and hands docs to Documentor.
 2. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
    `local.properties`) and test pass of everything merged 2026-11-19/20, emulator now, Chromecast steps queued.
    Failures become new bug issues.

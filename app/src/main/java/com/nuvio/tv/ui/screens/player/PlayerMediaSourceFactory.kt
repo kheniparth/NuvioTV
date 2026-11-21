@@ -49,8 +49,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
+import java.net.UnknownHostException
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.Base64
@@ -1203,6 +1206,11 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
                 return androidx.media3.common.C.TIME_UNSET
             }
         }
+        // DNS / refused connection will not recover by retrying the same URL; fail on the first
+        // attempt so Live TV can show the offline message within ~20 s (TEC-52).
+        if (shouldFailFastNetworkLoadError(loadErrorInfo.exception)) {
+            return C.TIME_UNSET
+        }
         val timeout = loadErrorInfo.exception.findCause<SocketTimeoutException>() != null
         return if (timeout) {
             when (loadErrorInfo.errorCount) {
@@ -1213,6 +1221,15 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
         } else super.getRetryDelayMsFor(loadErrorInfo)
     }
 }
+
+/**
+ * True when ExoPlayer should not retry a load: the host cannot be resolved or the TCP connect
+ * was refused. Transient timeouts still use the normal backoff; HTTP 403 stays on the Live TV
+ * retry-once path after the terminal PlaybackException.
+ */
+internal fun shouldFailFastNetworkLoadError(exception: IOException): Boolean =
+    exception.findCause<UnknownHostException>() != null ||
+        exception.findCause<ConnectException>() != null
 
 internal fun shouldPreferAlternativeHlsTrack(
     responseCode: Int?,

@@ -7,9 +7,30 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Base64
 
 class PlayerMediaSourceFactoryTest {
+
+    @Test
+    fun `dns and connect failures fail fast without load retries`() {
+        assertTrue(
+            shouldFailFastNetworkLoadError(
+                UnknownHostException("Unable to resolve host \"example.invalid\"")
+            )
+        )
+        assertTrue(
+            shouldFailFastNetworkLoadError(
+                IOException("open failed", UnknownHostException("example.invalid"))
+            )
+        )
+        assertTrue(shouldFailFastNetworkLoadError(ConnectException("Connection refused")))
+        assertFalse(shouldFailFastNetworkLoadError(SocketTimeoutException("timeout")))
+        assertFalse(shouldFailFastNetworkLoadError(IOException("other")))
+    }
 
     @Test
     fun `media segment 404 with an alternative prefers another HLS track`() {
