@@ -26,7 +26,9 @@ class SportsViewModelTest {
     fun `a source that never answers stops loading at the timeout`() = runTest {
         val scores = mockk<SportsScoreboard>()
         coEvery { scores.games(any()) } coAnswers { awaitCancellation() }
-        val viewModel = SportsViewModel(scores, mockk(), StandardTestDispatcher(testScheduler))
+        val repository = mockk<LiveTvRepository>()
+        coEvery { repository.channels() } returns emptyList()
+        val viewModel = SportsViewModel(scores, repository, StandardTestDispatcher(testScheduler))
         runCurrent()
 
         assertTrue(viewModel.uiState.value.loading)
@@ -42,7 +44,9 @@ class SportsViewModelTest {
     fun `a failing source shows its error and stops loading`() = runTest {
         val scores = mockk<SportsScoreboard>()
         coEvery { scores.games(any()) } throws IllegalStateException("ESPN unreachable")
-        val viewModel = SportsViewModel(scores, mockk(), StandardTestDispatcher(testScheduler))
+        val repository = mockk<LiveTvRepository>()
+        coEvery { repository.channels() } returns emptyList()
+        val viewModel = SportsViewModel(scores, repository, StandardTestDispatcher(testScheduler))
         runCurrent()
 
         assertFalse(viewModel.uiState.value.loading)

@@ -77,22 +77,32 @@ class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
 
     internal suspend fun games(source: SportsScoreSource, nowMillis: Long): List<SportsGame> {
         val days = espnScoreboardDates(nowMillis)
-        val leagues = source.leagues + cricketLeagues(source)
+        // Fixed leagues start while the cricket header resolves, so that round-trip is not serial.
         val results = coroutineScope {
-            leagues.map { league ->
-                async {
-                    runCatching { fetchLeague(source, league, days) }.onFailure { error ->
-                        if (error is CancellationException) throw error
-                        Log.w(TAG, "ESPN ${league.id} failed", error)
-                    }
-                }
-            }.awaitAll()
+            val cricket = async { cricketLeagues(source) }
+            val fixed = source.leagues.map { league ->
+                async { fetchLeagueResult(source, league, days) }
+            }
+            val fromCricket = cricket.await().map { league ->
+                async { fetchLeagueResult(source, league, days) }
+            }
+            (fixed + fromCricket).awaitAll()
         }
         if (results.isNotEmpty() && results.all { it.isFailure }) {
             throw IllegalStateException("Couldn't load scores")
         }
         return visibleSportsGames(results.flatMap { it.getOrNull().orEmpty() }, nowMillis)
     }
+
+    private suspend fun fetchLeagueResult(
+        source: SportsScoreSource,
+        league: SportsLeague,
+        days: List<String>,
+    ): Result<List<SportsGame>> =
+        runCatching { fetchLeague(source, league, days) }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Log.w(TAG, "ESPN ${league.id} failed", error)
+        }
 
     private suspend fun cricketLeagues(source: SportsScoreSource): List<SportsLeague> {
         val url = source.cricketHeaderUrl ?: return emptyList()
@@ -129,10 +139,14 @@ class SportsScoreboard @Inject constructor(private val http: LiveTvHttp) {
     }
 }
 
-/** Today plus the next two days, in ESPN's US date. A date range is rejected with HTTP 400. */
+/**
+ * Today plus tomorrow in ESPN's US date. A third day used to fan out 12 leagues × 3 dates
+ * (plus cricket) under OkHttp's 5-per-host limit and blow the Sports load budget; two days
+ * still covers most of the 48 h upcoming window. A date range is rejected with HTTP 400.
+ */
 internal fun espnScoreboardDates(nowMillis: Long): List<String> {
     val today = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.of("America/New_York")).toLocalDate()
-    return (0..2).map { offset ->
+    return (0..1).map { offset ->
         val date = today.plusDays(offset.toLong())
         "%04d%02d%02d".format(date.year, date.monthValue, date.dayOfMonth)
     }

@@ -55,6 +55,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,7 +64,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
-internal const val SPORTS_LOAD_TIMEOUT_MILLIS = 10_000L
+/** Matches the acceptance budget (~15 s) after ESPN fan-out was cut to two dates. */
+internal const val SPORTS_LOAD_TIMEOUT_MILLIS = 15_000L
 private const val SPORTS_ALL_KEY = "all"
 
 data class SportsRow(val game: SportsGame, val channels: List<LiveTvChannel>)
@@ -93,10 +96,26 @@ class SportsViewModel(
             try {
                 val rows = withTimeout(SPORTS_LOAD_TIMEOUT_MILLIS) {
                     withContext(loadDispatcher) {
-                        val games = scores.games(now)
-                        val channels = repository.channels()
-                        val matched = matchSportsChannelsOnce(games, channels)
-                        List(games.size) { index -> SportsRow(games[index], matched[index]) }
+                        // Scores and channels are independent; run them together so a slow
+                        // playlist does not steal the whole ESPN budget (and vice versa).
+                        coroutineScope {
+                            val gamesDeferred = async {
+                                val started = System.nanoTime()
+                                scores.games(now).also {
+                                    Log.i(TAG, "scores.games finished in ${(System.nanoTime() - started) / 1_000_000}ms (${it.size} games)")
+                                }
+                            }
+                            val channelsDeferred = async {
+                                val started = System.nanoTime()
+                                repository.channels().also {
+                                    Log.i(TAG, "repository.channels finished in ${(System.nanoTime() - started) / 1_000_000}ms (${it.size} channels)")
+                                }
+                            }
+                            val games = gamesDeferred.await()
+                            val channels = channelsDeferred.await()
+                            val matched = matchSportsChannelsOnce(games, channels)
+                            List(games.size) { index -> SportsRow(games[index], matched[index]) }
+                        }
                     }
                 }
                 _uiState.value = SportsUiState(loading = false, rows = rows, nowMillis = now)

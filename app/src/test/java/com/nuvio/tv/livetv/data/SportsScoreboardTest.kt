@@ -16,6 +16,13 @@ class SportsScoreboardTest {
     private val now = 1_700_000_000_000L
 
     @Test
+    fun `scoreboard dates cover today and tomorrow only`() {
+        val days = espnScoreboardDates(now)
+        assertEquals(2, days.size)
+        assertTrue(days[0] < days[1])
+    }
+
+    @Test
     fun `per day scores load when a date range is rejected`() = runTest {
         val days = espnScoreboardDates(now)
         val seen = Collections.synchronizedList(mutableListOf<String>())
