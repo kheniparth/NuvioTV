@@ -1,6 +1,6 @@
 # Nuvio progress
 
-Last updated: 2026-11-20. Single source of truth for picking the work back up with any agent.
+Last updated: 2026-11-21. Single source of truth for picking the work back up with any agent.
 Update it at the end of every work session (see [AGENTS.md](AGENTS.md)).
 
 ## Goal
@@ -34,15 +34,23 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   filed as #83-#85 and desktop briefs D1-D8; queued on Paperclip.
 - 2026-11-20: #85 TMDB key done: Parth added `TMDB_API_KEY` to the factory props; agents added a missing-key
   guard in `app/build.gradle.kts` (PR #90, merged `56d94fb8e`).
+- 2026-11-21: TEC-51 Sports timeout fixed (PR #89) and TEC-52 offline Live TV error finished with the fail-fast
+  follow-up (PR #95); both merged into `dev` after Tester3 passes.
 
-## Current state (2026-11-20)
+## Current state (2026-11-21)
 - TV fork `dev` has the full Live TV feature plus every fix filed so far. All Live TV issues through #82 are closed:
   Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
   CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
-  release builds keep Live TV settings (#52). None of these has been tested together on a device yet.
-- Paperclip TEC-52: PR #88 merged (offline message on DNS failure), but acceptance timed out at 37–38 s
-  because ExoPlayer still retried loads ~6×. Follow-up `paperclip/TEC-52-offline-failfast` fails the load
-  on the first UnknownHost/ConnectException so the message can appear within ~20 s; awaiting Tester3.
+  release builds keep Live TV settings (#52). Apart from the TEC-76 batch, none of these has had one combined
+  release-build pass on a device yet (TEC-6).
+- TEC-51 Sports fixed on `dev` (PR #89, merge `17a46a13f`): the ESPN fan-out is cut to today+tomorrow, scores
+  and channels load in parallel, and the load budget is 15 s, so games render in 4–5 s instead of the
+  "Couldn't load scores" timeout. Tester3 passed (Sports unit tests 16/16).
+- TEC-52 Live TV offline fixed on `dev` (PR #88, merge `08fba9cd7`; fail-fast follow-up PR #95, merge
+  `3e82305a5`): a DNS/connection failure shows "No connection — check your network" after the first load
+  attempt (9.4 s on the emulator, was 75 s). Tester3 passed steps 1–2; the 403 recovery path was unchanged
+  but could not be re-observed because the source issued no 403 that session. The fail-fast lives in the
+  shared player load policy, so a VOD DNS/connection failure also stops retrying the same URL.
 
 - #85 TMDB key closed: the factory props now have `TMDB_API_KEY`, and a missing or blank key warns
   `TMDB_API_KEY missing: metadata will not load` on debug while `:app:assembleFullRelease` fails (PR #90).
@@ -53,15 +61,13 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. TEC-52 fail-fast PR: Tester3 acceptance on `emulator-5554` (offline readable error within ~20 s; restore
-   DNS; 403 zap not regressed), then a senior who did not author the change merges and hands docs to Documentor.
-2. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
+1. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
    `local.properties`) and test pass of everything merged 2026-11-19/20, emulator now, Chromecast steps queued.
    Failures become new bug issues.
-3. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
-4. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
+2. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
+3. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
-5. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
+4. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
    D2 data layer + desktop storage, D3 settings page, D4 Channels + nav + libmpv playback with headers,
    D5 Guide/Sports/On Demand, D6 in-player channel switching, D7 bootstrap + Windows packaging,
    D8 macOS arm64 build in CI. Do not merge Enhanced into it (~1,050 compile errors). Bring the TV fixes over
