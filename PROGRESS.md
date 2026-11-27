@@ -1,6 +1,6 @@
 # Nuvio progress
 
-Last updated: 2026-11-21. Single source of truth for picking the work back up with any agent.
+Last updated: 2026-11-27. Single source of truth for picking the work back up with any agent.
 Update it at the end of every work session (see [AGENTS.md](AGENTS.md)).
 
 ## Goal
@@ -37,7 +37,13 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 - 2026-11-21: TEC-51 Sports timeout fixed (PR #89) and TEC-52 offline Live TV error finished with the fail-fast
   follow-up (PR #95); both merged into `dev` after Tester3 passes.
 
-## Current state (2026-11-21)
+## Current state (2026-11-27)
+- TEC-365 local release pipeline scripts are on `paperclip/TEC-365-release-local`: `scripts/init-release-key.sh`
+  (idempotent keystore + `release.env` under `/mnt/d/secrets/nuvio`) and `scripts/release-local.sh` (signed
+  `assembleFullRelease` from a clean `main`, then `gh release create --latest`). Parth unblocked this from the
+  Desktop Live TV chain so the first signed GitHub Release can ship in parallel. Keystore was initialized on the
+  release machine; never commit those files. First real publish still needs Tester3: merge this PR to `dev`,
+  promote `dev`→`main`, then run `scripts/release-local.sh` from a clean `main` worktree.
 - TV fork `dev` has the full Live TV feature plus every fix filed so far. All Live TV issues through #82 are closed:
   Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
   CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
@@ -61,13 +67,16 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
+1. TEC-365: Tester3 merge of the release-script PR into `dev`, then `dev`→`main` promotion, then first signed
+   release N via `scripts/release-local.sh` (N+1/N+2 can follow later). TEC-364 (in-app updater) stays parked
+   behind Desktop Live TV.
+2. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
    `local.properties`) and test pass of everything merged 2026-11-19/20, emulator now, Chromecast steps queued.
    Failures become new bug issues.
-2. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
-3. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
+3. #84 revert the orange test icon (#79) after Parth signs off a stable build (`later`).
+4. Merge upstream into both forks before each round (`scripts/upstream-sync.sh` for TV), test upstream's new
    features along with ours.
-4. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
+5. Desktop fork Live TV, in order: D1 fork setup (AGENTS.md, PROGRESS.md, upstream sync script, first sync),
    D2 data layer + desktop storage, D3 settings page, D4 Channels + nav + libmpv playback with headers,
    D5 Guide/Sports/On Demand, D6 in-player channel switching, D7 bootstrap + Windows packaging,
    D8 macOS arm64 build in CI. Do not merge Enhanced into it (~1,050 compile errors). Bring the TV fixes over
@@ -118,4 +127,5 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
 ## Secrets (never commit)
 `/mnt/d/stalker/.env` (Stalker host, MAC, addon token), nuvio-enhanced `.env` (login), keystores and their
 passwords, `local.properties` (includes `TMDB_API_KEY`; factory copy is
-`~/nuvio/factory/NuvioTV.local.properties`).
+`~/nuvio/factory/NuvioTV.local.properties`), release signing at `/mnt/d/secrets/nuvio/nuvio-release.jks` and
+`/mnt/d/secrets/nuvio/release.env` (created by `scripts/init-release-key.sh`).

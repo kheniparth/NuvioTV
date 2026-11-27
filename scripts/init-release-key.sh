@@ -4,6 +4,14 @@
 
 set -euo pipefail
 
+# Match .factory/build.sh so keytool works even when the runner PATH is trimmed.
+export JAVA_HOME="${JAVA_HOME:-$HOME/.local/sdk/jdk-21}"
+KEYTOOL="${JAVA_HOME}/bin/keytool"
+if [[ ! -x "$KEYTOOL" ]]; then
+    echo "Error: keytool not found at $KEYTOOL" >&2
+    exit 1
+fi
+
 secrets_dir="${NUVIO_SECRETS_DIR:-/mnt/d/secrets/nuvio}"
 keystore_path="$secrets_dir/nuvio-release.jks"
 env_file="$secrets_dir/release.env"
@@ -26,32 +34,38 @@ if [[ -f "$env_file" ]]; then
     exit 1
 fi
 
+# Hex-only: base64 can include '+' which breaks keytool -storepass argv parsing.
+# Same password for store and key: PKCS12 rejects different passwords.
 generate_password() {
-    openssl rand -base64 32 | tr -d '/' | cut -c1-16
+    openssl rand -hex 16
 }
 
-key_password=$(generate_password)
-store_password=$(generate_password)
+release_password=$(generate_password)
 
 # Create the keystore with the signing key
-keytool -genkey -v \
+if ! "$KEYTOOL" -genkey \
     -keystore "$keystore_path" \
     -alias "$key_alias" \
     -keyalg RSA \
     -keysize 2048 \
     -sigalg SHA256withRSA \
     -validity 36500 \
-    -keypass "$key_password" \
-    -storepass "$store_password" \
+    -keypass "$release_password" \
+    -storepass "$release_password" \
+    -storetype PKCS12 \
     -dname "CN=Nuvio TV Release,O=Nuvio,C=CA" \
-    >/dev/null 2>&1
+    >/dev/null; then
+    echo "Error: keytool failed creating $keystore_path" >&2
+    rm -f "$keystore_path"
+    exit 1
+fi
 
 # Create the release.env file with the signing values
 cat > "$env_file" <<EOF
 export NUVIO_RELEASE_STORE_FILE=$keystore_path
 export NUVIO_RELEASE_KEY_ALIAS=$key_alias
-export NUVIO_RELEASE_KEY_PASSWORD=$key_password
-export NUVIO_RELEASE_STORE_PASSWORD=$store_password
+export NUVIO_RELEASE_KEY_PASSWORD=$release_password
+export NUVIO_RELEASE_STORE_PASSWORD=$release_password
 EOF
 
 chmod 600 "$env_file"
