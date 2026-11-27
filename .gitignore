@@ -51,6 +51,8 @@ scripts/*
 !scripts/upstream-sync.sh
 !scripts/release-metadata.sh
 !scripts/release_beta.py
+!scripts/init-release-key.sh
+!scripts/release-local.sh
 !scripts/tests/
 !scripts/tests/*.py
 /supabase
