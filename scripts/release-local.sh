@@ -68,21 +68,31 @@ if gh release view "$tag" -R kheniparth/NuvioTV >/dev/null 2>&1; then
     error "Release '$tag' already exists"
 fi
 
-# Create throwaway worktree for the build
+# Create throwaway detached worktree so the shared main checkout stays usable.
+# .factory/build.sh rsyncs this into $HOME/nuvio/factory/build/<basename>/ and builds there.
 build_worktree_name="release-$tag"
 build_worktree_path="$HOME/nuvio/$build_worktree_name"
+factory_build_dir="$HOME/nuvio/factory/build/$build_worktree_name"
+build_log="$factory_build_dir.log"
+apk_output_dir="$factory_build_dir/app/build/outputs/apk/full/release"
 
 cleanup() {
     local status=$?
     if [[ -d "$build_worktree_path" ]]; then
-        git -C "$repo_root" worktree remove "$build_worktree_path" 2>/dev/null || true
+        git -C "$repo_root" worktree remove --force "$build_worktree_path" 2>/dev/null || true
     fi
     exit "$status"
 }
 trap cleanup EXIT
 
-# Create worktree from main
-git -C "$repo_root" worktree add "$build_worktree_path" main >/dev/null 2>&1
+echo "Worktree: $build_worktree_path"
+echo "Factory build dir: $factory_build_dir"
+echo "Build log: $build_log"
+echo "APK directory: $apk_output_dir"
+
+# Detached checkout of origin/main (HEAD == origin/main already enforced above).
+# Must not check out branch 'main' again — it is already used by $repo_root.
+git -C "$repo_root" worktree add --detach "$build_worktree_path" origin/main
 
 # Source the release env and prepare for build
 # shellcheck disable=SC1090
@@ -93,10 +103,8 @@ export NUVIO_RELEASE_STORE_FILE NUVIO_RELEASE_KEY_ALIAS NUVIO_RELEASE_KEY_PASSWO
 echo "Building release APKs for $version..."
 bash "$repo_root/.factory/build.sh" "$build_worktree_path" :app:assembleFullRelease
 
-# Find the APK output directory
-apk_output_dir="$build_worktree_path/app/build/outputs/apk/full/release"
 if [[ ! -d "$apk_output_dir" ]]; then
-    error "APK output directory not found at $apk_output_dir"
+    error "APK output directory not found at $apk_output_dir (see build log: $build_log)"
 fi
 
 # Collect all APKs
@@ -142,11 +150,11 @@ fi
 
 # Create annotated tag
 echo "Creating tag '$tag'..."
-git -C "$repo_root" tag -a "$tag" -m "$title" >/dev/null 2>&1
+git -C "$repo_root" tag -a "$tag" -m "$title"
 
 # Push tag
 echo "Pushing tag..."
-git -C "$repo_root" push origin "$tag" >/dev/null 2>&1
+git -C "$repo_root" push origin "$tag"
 
 # Create release with gh
 echo "Creating release..."
