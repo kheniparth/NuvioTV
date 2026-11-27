@@ -38,12 +38,13 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   follow-up (PR #95); both merged into `dev` after Tester3 passes.
 
 ## Current state (2026-11-27)
-- TEC-365 local release pipeline scripts are on `paperclip/TEC-365-release-local`: `scripts/init-release-key.sh`
-  (idempotent keystore + `release.env` under `/mnt/d/secrets/nuvio`) and `scripts/release-local.sh` (signed
-  `assembleFullRelease` from a clean `main`, then `gh release create --latest`). Parth unblocked this from the
-  Desktop Live TV chain so the first signed GitHub Release can ship in parallel. Keystore was initialized on the
-  release machine; never commit those files. First real publish still needs Tester3: merge this PR to `dev`,
-  promote `dev`→`main`, then run `scripts/release-local.sh` from a clean `main` worktree.
+- TEC-365 local release pipeline scripts are on `paperclip/TEC-365-release-local` at `3f5c9a2d2` (PR #98):
+  `scripts/init-release-key.sh` and `scripts/release-local.sh`. Tester3 batch TEC-414 failed on two script bugs
+  (second `main` worktree + APK path pointing at the source worktree instead of
+  `$HOME/nuvio/factory/build/<name>/`); both fixed. Dry-run on scratch `main` @ `3f5c9a2d2` built five signed
+  release APKs and published nothing. Tag conflict `1.2.0-beta.3` (local-only) is escalated as TEC-417 — do not
+  delete or bump here. Keystore stays under `/mnt/d/secrets/nuvio` (never commit). Still needs Tester3 re-test,
+  merge to `dev`, `dev`→`main`, then first real release N.
 - TV fork `dev` has the full Live TV feature plus every fix filed so far. All Live TV issues through #82 are closed:
   Sports load (#70), category-left layout (#71), Guide names and focus (#72, #81), episode sort latest-first (#74, #80),
   CH+/CH- and Page Up/Down (#75), orange copper test icon (#79), Stalker stream release and 403 retry (#82),
@@ -67,9 +68,8 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   check the issue's labels and open PRs before starting so the factory and Paperclip agents don't both build it.
 
 ## Next steps
-1. TEC-365: Tester3 merge of the release-script PR into `dev`, then `dev`→`main` promotion, then first signed
-   release N via `scripts/release-local.sh` (N+1/N+2 can follow later). TEC-364 (in-app updater) stays parked
-   behind Desktop Live TV.
+1. TEC-365: PM2 re-batch for Tester3 on PR #98 @ `3f5c9a2d2`; on pass merge to `dev`, promote `dev`→`main`,
+   then first signed release N (after TEC-417 tag decision). TEC-364 stays parked behind Desktop Live TV.
 2. #83 one combined release build (`:app:assembleFullRelease`, which now needs `TMDB_API_KEY` in
    `local.properties`) and test pass of everything merged 2026-11-19/20, emulator now, Chromecast steps queued.
    Failures become new bug issues.
