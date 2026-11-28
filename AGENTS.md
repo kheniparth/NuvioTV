@@ -12,3 +12,8 @@ Fork of NuvioMedia/NuvioTV (Android TV) adding Live TV ported from Nuvio Enhance
   edit PROGRESS.md; your handoff goes in the PR body (`.factory/handoff.md`).
 - Work in WSL (`~/nuvio/nuvio-tv`), never Gradle on Windows or on `/mnt/d`.
 - Never open a PR, issue or comment on `NuvioMedia/*`. PRs target `kheniparth/NuvioTV`, base `dev`.
+
+## Live TV sources
+
+- Live TV uses the stalker project's M3U/Xtream proxy only.
+- Never make a direct Stalker portal connection (portal URL + MAC/token, `new.gprod.co`) in code, scripts, tests or device setup. If a task seems to need one, stop and raise it on the issue instead.
