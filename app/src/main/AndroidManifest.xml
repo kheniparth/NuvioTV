@@ -64,6 +64,11 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <provider
+            android:name=".livetv.data.local.LiveTvImportProvider"
+            android:authorities="${applicationId}.livetvimport"
+            android:exported="true" />
+
         <receiver
             android:name=".core.sync.androidtv.TvChannelBootReceiver"
             android:exported="true">

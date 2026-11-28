@@ -6,6 +6,7 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -86,6 +87,41 @@ class LiveTvSettingsDataStore @Inject constructor(
 
     suspend fun setRecentChannelIds(ids: List<String>) {
         store().edit { it[recentsKey] = encodeLiveTvStringList(capLiveTvRecentChannelIds(ids)) }
+    }
+
+    /**
+     * Merge [import] into the named profile's Live TV store. Writes only when something
+     * changed; never clears other keys. Stalker portal/MAC are not written.
+     */
+    suspend fun importSources(import: LiveTvImport): Boolean {
+        val dataStore = factory.get(import.profileId, FEATURE)
+        val prefs = dataStore.data.first()
+        val current = LiveTvSettings(
+            playlists = decodeLiveTvPlaylists(prefs[playlistsKey]),
+            xtream = decodeLiveTvXtream(prefs[xtreamKey]),
+            stalker = decodeLiveTvStalker(prefs[stalkerKey]),
+            epgSources = decodeLiveTvEpgSources(prefs[epgSourcesKey]),
+            favoriteChannelIds = normalizeLiveTvFavoriteChannelIds(
+                decodeLiveTvStringList(prefs[favoritesKey])
+            ),
+            favoriteVodIds = normalizeLiveTvFavoriteChannelIds(
+                decodeLiveTvStringList(prefs[vodFavoritesKey])
+            ),
+            recentChannelIds = capLiveTvRecentChannelIds(
+                decodeLiveTvStringList(prefs[recentsKey])
+            ),
+        )
+        val merged = mergeLiveTvImport(current, import)
+        if (merged == current) return false
+        dataStore.edit { editor ->
+            if (merged.playlists != current.playlists) {
+                editor[playlistsKey] = encodeLiveTvPlaylists(merged.playlists)
+            }
+            if (merged.xtream != current.xtream) {
+                editor[xtreamKey] = encodeLiveTvXtream(merged.xtream)
+            }
+        }
+        return true
     }
 
     private companion object {
