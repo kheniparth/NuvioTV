@@ -96,10 +96,10 @@ can check the stream before going full screen. Use one shared lightweight player
 the screen. Must not slow down list scrolling on the Chromecast.
 
 ## Step 10: Provider bootstrap for test devices
-`scripts/livetv-bootstrap.sh`: reads `/mnt/d/stalker/.env` (STALKER_HOST, STALKER_MAC, ADDON_PUBLIC_URL,
-ADDON_TOKEN) and writes the sources into the app on an adb device (Android TV / Chromecast / emulator).
-Same approach as Enhanced's `scripts/tv-livetv.sh` (run-as on a debuggable build; the sources survive a later
-`adb install -r` of a release-like build). Never print the token.
+`scripts/tv-livetv.sh`: reads `/mnt/d/stalker/.env` (ADDON_PUBLIC_URL, ADDON_TOKEN) and sends the M3U + Xtream
+proxy sources to the app's exported, shell-gated import provider over adb (`content call` on stdin). Works on
+signed release builds, writes only Live TV settings, reports "already up to date" on a rerun, and survives a
+later `adb install -r`. Never print the token.
 
 ## Step 11: Upstream sync
 Document and script `git fetch upstream && git merge upstream/dev` for this fork; Live TV lives in its own
@@ -118,8 +118,8 @@ constructor-injected, so there is no DI module edit.
 
 Everything else outside `com/nuvio/tv/livetv` in `git diff --name-status upstream/dev...HEAD`:
 
-- `.gitignore` — `scripts/*` stays ignored, except `livetv-bootstrap.sh`, `livetv-bootstrap.py`, and `upstream-sync.sh`.
-- `scripts/livetv-bootstrap.sh`, `scripts/livetv-bootstrap.py` — write provider settings onto a debuggable build.
+- `.gitignore` — `scripts/*` stays ignored, except `tv-livetv.sh` and `upstream-sync.sh`.
+- `scripts/tv-livetv.sh` — send the M3U/Xtream proxy sources to the app's import provider.
 - `scripts/upstream-sync.sh` — the sync script above.
 - `LIVE_TV_PORT_PLAN.md` — this plan.
 - `.factory/**` — factory worker files, not Live TV wiring.
@@ -156,8 +156,7 @@ A	.factory/workers.json
 A	.factory/workers.ps1
 M	.gitignore
 A	LIVE_TV_PORT_PLAN.md
-A	scripts/livetv-bootstrap.py
-A	scripts/livetv-bootstrap.sh
+A	scripts/tv-livetv.sh
 A	scripts/upstream-sync.sh
 ```
 

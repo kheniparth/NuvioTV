@@ -87,12 +87,13 @@ Board: https://github.com/users/kheniparth/projects/2 (gh needs `gh auth refresh
   :app:testFullDebugUnitTest`). One Gradle build needs ~13 GB of WSL's ~23 GB: never run two at once.
 - `:app:assembleFullRelease` fails with `TMDB_API_KEY missing: metadata will not load` when the key is absent or
   blank; debug builds only warn and still run.
-- Debuggable APK for bootstrap/run-as: build with `-Pdebuggable=true`. Package `com.nuviodebug.com`.
+- Debuggable APK: build with `-Pdebuggable=true`. Package `com.nuviodebug.com`.
 - adb: WSL `~/Android/Sdk/platform-tools/adb` only.
 - Devices: Android TV emulator in WSL (AVD `nuvio_tv`, `emulator-5554`, run it as a long-lived background job);
   Chromecast with Google TV at 192.168.2.10 (adb TLS: `adb mdns services`, then `adb connect <ip:port>`).
-- Live TV sources: `bash scripts/livetv-bootstrap.sh [--device]` reads `/mnt/d/stalker/.env`. Rerun it after
-  onboarding (finishing onboarding resets Live TV settings).
+- Live TV sources: `NUVIO_TV_IP=<tv> scripts/tv-livetv.sh` (or `NUVIO_TV_SERIAL=emulator-5554`) reads
+  `/mnt/d/stalker/.env` and imports the M3U/Xtream proxy sources through the app's shell-gated provider. Rerun it
+  after onboarding or an update that clears Live TV settings; `--dry-run` prints the masked payload.
 - Saved login: `~/nuvio/nuvio-enhanced/scripts/tv-login.sh` types NUVIO_EMAIL/NUVIO_PASSWORD from that repo's
   `.env` into the sign-in screen over adb. Signing key: `keystore/debug.keystore` in nuvio-enhanced.
 - Upstream: `bash scripts/upstream-sync.sh` from a clean `dev` (creates `sync/upstream-YYYYMMDD`, runs checks,
