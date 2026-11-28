@@ -49,9 +49,13 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -142,6 +146,9 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.auth.DeviceSessionRegistration
 import com.nuvio.tv.core.deeplink.DeepLinkHandler
+import com.nuvio.tv.core.deeplink.DeepLinkInstallResult
+import com.nuvio.tv.data.repository.TrackingAddonConsentController
+import com.nuvio.tv.ui.components.TrackingAddonConsentDialog
 import com.nuvio.tv.core.deeplink.DeepLinkParser
 import com.nuvio.tv.core.player.PlayerWindowBackdrop
 import com.nuvio.tv.core.party.PartyRepository
@@ -219,6 +226,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
+val LocalRootContentInset = compositionLocalOf { 0.dp }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 
 data class SplashBackground(
@@ -231,6 +239,7 @@ data class SplashBackground(
 val LocalSplashBackground = compositionLocalOf { SplashBackground() }
 
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 3_000L
+private const val SIDEBAR_FOCUS_RECOVERY_ATTEMPTS = 15
 
 private const val MAX_SUPPORTED_FONT_SCALE = 1.15f
 
@@ -320,13 +329,22 @@ open class MainActivity : ComponentActivity() {
     lateinit var trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool
 
     @Inject
+    lateinit var backgroundTrailerController: com.nuvio.tv.core.player.BackgroundTrailerController
+
+    @Inject
     lateinit var externalPlaybackTracker: com.nuvio.tv.core.player.ExternalPlaybackTracker
 
     @Inject
     lateinit var deepLinkHandler: DeepLinkHandler
 
     @Inject
+    lateinit var trackingAddonConsentController: TrackingAddonConsentController
+
+    @Inject
     lateinit var partyRepository: PartyRepository
+
+    @Inject
+    lateinit var liveTvRepository: com.nuvio.tv.livetv.data.LiveTvRepository
 
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
@@ -380,7 +398,11 @@ open class MainActivity : ComponentActivity() {
         }
 
         // Extract extras set by the Continue Watching launcher channel preview programs.
-        val launchContentId = intent?.getStringExtra("contentId")
+        val isFreshLaunch = isFreshLaunchIntent(
+            hasSavedInstanceState = savedInstanceState != null,
+            intentFlags = intent?.flags ?: 0
+        )
+        val launchContentId = intent?.getStringExtra("contentId")?.takeIf { isFreshLaunch }
         val launchContentType = intent?.getStringExtra("contentType")
         val launchMode = intent?.getStringExtra("launchMode")
         val launchVideoId = intent?.getStringExtra("videoId")
@@ -713,6 +735,7 @@ open class MainActivity : ComponentActivity() {
                     LocalMemberAccess provides mainUiPrefs.memberAccess,
                     LocalAmbientIdleController provides ambientIdleController,
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
+                    com.nuvio.tv.core.player.LocalBackgroundTrailerController provides backgroundTrailerController,
                     LocalSplashBackground provides splashBackground,
                     LocalStartupLoadingState provides startupLoadingState,
                     LocalStartupSplashEnabled provides startupSplashEnabled
@@ -840,8 +863,31 @@ open class MainActivity : ComponentActivity() {
                             if (pendingDeepLinkUrl.value == url) {
                                 pendingDeepLinkUrl.value = null
                             }
-                            Toast.makeText(context, installResult.message, Toast.LENGTH_LONG).show()
+                            if (installResult !is DeepLinkInstallResult.ConsentRequired) {
+                                Toast.makeText(context, installResult.message, Toast.LENGTH_LONG).show()
+                            }
                         }
+                    }
+
+                    val pendingTrackingInstall by trackingAddonConsentController.pending.collectAsState()
+                    pendingTrackingInstall?.let { pending ->
+                        TrackingAddonConsentDialog(
+                            addonName = pending.addon.displayName.ifBlank { pending.addon.baseUrl },
+                            onInstall = {
+                                lifecycleScope.launch {
+                                    val installed = trackingAddonConsentController.install() ?: return@launch
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.addon_install_success,
+                                            installed.displayName.ifBlank { installed.baseUrl }
+                                        ),
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            },
+                            onDismiss = trackingAddonConsentController::dismiss
+                        )
                     }
 
                     if (needsEssentialAddonSetup) {
@@ -876,6 +922,23 @@ open class MainActivity : ComponentActivity() {
                     LaunchedEffect(actualRoute) {
                         optimisticRoute = null
                         ambientIdleController.onInteraction()
+                    }
+
+                    // The player and home are routes inside this activity, so leaving the
+                    // player or returning home never reaches onResume. Ask for the same
+                    // throttled watch state pull a foreground return gets.
+                    LaunchedEffect(navController) {
+                        var previousRoute: String? = null
+                        navController.currentBackStackEntryFlow.collect { entry ->
+                            val route = entry.destination.route
+                            if (route == previousRoute) return@collect
+                            val leftPlayer = previousRoute == Screen.Player.route
+                            val returnedHome = previousRoute != null && route == Screen.Home.route
+                            if (leftPlayer || returnedHome) {
+                                startupSyncService.requestNavigationSync()
+                            }
+                            previousRoute = route
+                        }
                     }
 
                     // Auto-play next episode for EXTERNAL players: the tracker resolves the
@@ -1017,7 +1080,9 @@ open class MainActivity : ComponentActivity() {
                                 if (pendingDeepLinkUrl.value == url) {
                                     pendingDeepLinkUrl.value = null
                                 }
-                                Toast.makeText(context, installResult.message, Toast.LENGTH_LONG).show()
+                                if (installResult !is DeepLinkInstallResult.ConsentRequired) {
+                                    Toast.makeText(context, installResult.message, Toast.LENGTH_LONG).show()
+                                }
                             }
                             null -> {
                                 pendingDeepLinkUrl.value = null
@@ -1045,7 +1110,18 @@ open class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val rootRoutes = remember(discoverLocation) {
+                    val liveTvAvailable by liveTvRepository.hasConfiguredSource.collectAsState(initial = false)
+                    val liveTvRoutes = setOf(Screen.LiveTv.route, Screen.LiveTvOnDemand.route, Screen.LiveTvGuide.route, Screen.LiveTvSports.route)
+                    LaunchedEffect(liveTvAvailable, currentRoute) {
+                        if (!liveTvAvailable && liveTvRoutes.any { it == currentRoute }) {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+
+                    val rootRoutes = remember(discoverLocation, liveTvAvailable) {
                         buildSet {
                             add(Screen.Home.route)
                             add(Screen.Search.route)
@@ -1054,6 +1130,12 @@ open class MainActivity : ComponentActivity() {
                             if (discoverLocation == DiscoverLocation.IN_SIDEBAR) {
                                 add(Screen.Discover.route)
                             }
+                            if (liveTvAvailable) {
+                                add(Screen.LiveTv.route)
+                                add(Screen.LiveTvGuide.route)
+                                add(Screen.LiveTvSports.route)
+                                add(Screen.LiveTvOnDemand.route)
+                            }
                         }
                     }
 
@@ -1061,14 +1143,23 @@ open class MainActivity : ComponentActivity() {
                     val strNavDiscover = stringResource(R.string.nav_discover)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
+                    val strNavLiveTv = stringResource(R.string.nav_live_tv)
+                    val strNavOnDemand = stringResource(R.string.livetv_on_demand_title)
+                    val strNavGuide = stringResource(R.string.livetv_guide_title)
+                    val strNavSports = stringResource(R.string.livetv_sports_title)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
+                        strNavLiveTv,
+                        strNavOnDemand,
+                        strNavGuide,
+                        strNavSports,
                         strNavSettings,
-                        discoverLocation
+                        discoverLocation,
+                        liveTvAvailable
                     ) {
                         buildList {
                             add(
@@ -1101,6 +1192,36 @@ open class MainActivity : ComponentActivity() {
                                     iconRes = R.raw.sidebar_library
                                 )
                             )
+                            if (liveTvAvailable) {
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTv.route,
+                                        label = strNavLiveTv,
+                                        icon = Icons.Default.LiveTv
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvOnDemand.route,
+                                        label = strNavOnDemand,
+                                        icon = Icons.Default.Movie
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvGuide.route,
+                                        label = strNavGuide,
+                                        icon = Icons.Default.DateRange
+                                    )
+                                )
+                                add(
+                                    DrawerItem(
+                                        route = Screen.LiveTvSports.route,
+                                        label = strNavSports,
+                                        icon = Icons.Default.SportsSoccer
+                                    )
+                                )
+                            }
                             add(
                                 DrawerItem(
                                     route = Screen.Settings.route,
@@ -1399,19 +1520,23 @@ private fun SidebarFocusRecoveryEffect(
     drawerItems: List<DrawerItem>,
     selectedDrawerRoute: String?,
     drawerItemFocusRequesters: Map<String, FocusRequester>,
-    sidebarOwnsFocus: Boolean
+    sidebarOwnsFocus: Boolean,
+    sidebarHasFocus: Boolean
 ) {
-    LaunchedEffect(drawerItems, sidebarOwnsFocus, selectedDrawerRoute) {
+    LaunchedEffect(drawerItems, sidebarOwnsFocus, selectedDrawerRoute, sidebarHasFocus) {
         if (!sidebarOwnsFocus) {
             return@LaunchedEffect
         }
-        if (selectedDrawerRoute != null && drawerItems.any { it.route == selectedDrawerRoute }) {
+        val selectedVisible = selectedDrawerRoute != null && drawerItems.any { it.route == selectedDrawerRoute }
+        if (selectedVisible && sidebarHasFocus) {
             return@LaunchedEffect
         }
-        val fallbackRoute = drawerItems.firstOrNull()?.route ?: return@LaunchedEffect
-        val requester = drawerItemFocusRequesters[fallbackRoute] ?: return@LaunchedEffect
-        repeat(2) { withFrameNanos { } }
-        runCatching { requester.requestFocus() }
+        val targetRoute = if (selectedVisible) selectedDrawerRoute else drawerItems.firstOrNull()?.route
+        val requester = targetRoute?.let { drawerItemFocusRequesters[it] } ?: return@LaunchedEffect
+        repeat(SIDEBAR_FOCUS_RECOVERY_ATTEMPTS) {
+            repeat(2) { withFrameNanos { } }
+            if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        }
     }
 }
 
@@ -1455,6 +1580,7 @@ private fun LegacySidebarScaffold(
     val contentFocusRequester = remember { FocusRequester() }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+    var drawerHasFocus by remember { mutableStateOf(false) }
     // Bumped on every key event the drawer sees so the auto-collapse timer
     // resets while the user navigates between drawer items.
     var legacyDrawerInteractionVersion by remember { mutableStateOf(0) }
@@ -1500,7 +1626,8 @@ private fun LegacySidebarScaffold(
         drawerItems = drawerItems,
         selectedDrawerRoute = selectedDrawerRoute,
         drawerItemFocusRequesters = drawerItemFocusRequesters,
-        sidebarOwnsFocus = showSidebar && drawerState.currentValue == DrawerValue.Open
+        sidebarOwnsFocus = showSidebar && drawerState.currentValue == DrawerValue.Open,
+        sidebarHasFocus = drawerHasFocus
     )
 
     ModalNavigationDrawer(
@@ -1515,6 +1642,7 @@ private fun LegacySidebarScaffold(
                         .background(NuvioTheme.colors.Background)
                         .padding(NuvioTheme.spacing.card.outer)
                         .selectableGroup()
+                        .onFocusChanged { drawerHasFocus = it.hasFocus }
                         .onPreviewKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {
                                 legacyDrawerInteractionVersion++
@@ -1536,12 +1664,9 @@ private fun LegacySidebarScaffold(
                         label = "legacySidebarItemWidth"
                     )
 
+                    Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {
                     if (isExpanded) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                        ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Spacer(modifier = Modifier.height(30.dp))
                             if (showProfileSelector && activeProfileName.isNotEmpty()) {
                                 var isProfileFocused by remember { mutableStateOf(false) }
@@ -1597,13 +1722,13 @@ private fun LegacySidebarScaffold(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
 
                     Column(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .offset(y = 28.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
@@ -1632,26 +1757,31 @@ private fun LegacySidebarScaffold(
                                         .width(itemWidth)
                                         .offset(x = NuvioTheme.spacing.md)
                                 )
+                            }
                         }
                     }
-                }
+                    if (!isExpanded) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    }
             }
         }
         }
     ) {
-        val contentStartPadding by animateDpAsState(
-            targetValue = if (showSidebar && !sidebarCollapsed) {
-                NuvioLayout.tokens.sidebarContentOffset
-            } else {
+        // Applied per root destination (not on the NavHost container) so it only changes
+        // with the collapse setting, never during a navigation transition.
+        val rootContentInset by animateDpAsState(
+            targetValue = if (sidebarCollapsed) {
                 NuvioTheme.spacing.none
+            } else {
+                NuvioLayout.tokens.sidebarContentOffset
             },
             animationSpec = tween(NuvioMotion.tokens.durations.medium),
-            label = "contentStartPadding"
+            label = "rootContentInset"
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = contentStartPadding)
                 .onPreviewKeyEvent { keyEvent ->
                     // Long-press Back on a root route directly opens the sidebar,
                     // bypassing the "scroll row to start" BackHandler in home content.
@@ -1699,12 +1829,14 @@ private fun LegacySidebarScaffold(
         ) {
             CompositionLocalProvider(
                 LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open),
+                LocalRootContentInset provides rootContentInset,
                 LocalContentFocusRequester provides contentFocusRequester
             ) {
                 NuvioNavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
+                    hideBuiltInHeaders = hideBuiltInHeaders,
+                    discoverIsRoot = Screen.Discover.route in rootRoutes
                 )
             }
         }
@@ -1854,6 +1986,7 @@ private fun ModernSidebarScaffold(
     var sidebarCollapsePending by remember { mutableStateOf(false) }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+    var sidebarHasFocus by remember { mutableStateOf(false) }
     var focusedDrawerIndex by remember { mutableStateOf(-1) }
     var isFloatingPillIconOnly by remember { mutableStateOf(false) }
     var pillExpandRequestCount by remember { mutableIntStateOf(0) }
@@ -2009,7 +2142,8 @@ private fun ModernSidebarScaffold(
         drawerItems = drawerItems,
         selectedDrawerRoute = selectedDrawerRoute,
         drawerItemFocusRequesters = drawerItemFocusRequesters,
-        sidebarOwnsFocus = showSidebar && isSidebarExpanded
+        sidebarOwnsFocus = showSidebar && isSidebarExpanded && !sidebarCollapsePending,
+        sidebarHasFocus = sidebarHasFocus
     )
 
     Box(
@@ -2129,6 +2263,7 @@ private fun ModernSidebarScaffold(
                         transformOrigin = TransformOrigin(0f, 0f)
                     }
                     .selectableGroup()
+                    .onFocusChanged { sidebarHasFocus = it.hasFocus }
                     .onPreviewKeyEvent { keyEvent ->
                         if (!isSidebarExpanded || keyEvent.type != KeyEventType.KeyDown) {
                             return@onPreviewKeyEvent false

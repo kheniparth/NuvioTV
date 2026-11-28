@@ -40,6 +40,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,8 +66,12 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
+import com.nuvio.tv.domain.model.EpisodeListOrder
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.orderedEpisodes
+import com.nuvio.tv.domain.model.orderedSeasonTabs
+import com.nuvio.tv.ui.components.EpisodeListOrderButton
 import com.nuvio.tv.ui.theme.NuvioPrimitives
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.components.FocusScrollingText
@@ -106,8 +112,10 @@ internal fun EpisodesSidePanel(
     onEpisodeSelected: (Video) -> Unit,
     onEpisodeManualPlay: (Video) -> Unit,
     onStreamSelected: (Stream) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val episodeListOrderViewModel: EpisodeListOrderViewModel = hiltViewModel()
+    val episodeListOrder by episodeListOrderViewModel.order.collectAsStateWithLifecycle()
     LaunchedEffect(
         uiState.showEpisodeStreams
     ) {
@@ -160,6 +168,8 @@ internal fun EpisodesSidePanel(
                 } else {
                     EpisodesListView(
                         uiState = uiState,
+                        episodeListOrder = episodeListOrder,
+                        onEpisodeListOrderSelected = episodeListOrderViewModel::setOrder,
                         episodesFocusRequester = episodesFocusRequester,
                         onSeasonSelected = onSeasonSelected,
                         onEpisodeSelected = onEpisodeSelected,
@@ -513,12 +523,18 @@ private fun EpisodeStreamsView(
 @Composable
 private fun EpisodesListView(
     uiState: PlayerUiState,
+    episodeListOrder: EpisodeListOrder,
+    onEpisodeListOrderSelected: (EpisodeListOrder) -> Unit,
     episodesFocusRequester: FocusRequester,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeSelected: (Video) -> Unit,
     onEpisodeManualPlay: (Video) -> Unit
 ) {
     val seasonTabFocusRequester = remember { FocusRequester() }
+    val sortFocusRequester = remember { FocusRequester() }
+    val shownEpisodes = remember(uiState.episodes, episodeListOrder) {
+        uiState.episodes.orderedEpisodes(episodeListOrder, { it.season }, { it.episode }, { it.released })
+    }
     val episodesListState = rememberLazyListState()
     var seasonTabsFocused by remember { mutableStateOf(false) }
     var detailsEpisode by remember { mutableStateOf<Video?>(null) }
@@ -529,21 +545,30 @@ private fun EpisodesListView(
                 uiState.watchedEpisodeKeys.contains(episodeKey)
             )
     }
-    val lastOpenedEpisodeIndex = remember(
-        uiState.episodes,
-        uiState.episodeStreamsForVideoId
-    ) {
+    val lastOpenedEpisodeIndex = remember(shownEpisodes, uiState.episodeStreamsForVideoId) {
         val targetId = uiState.episodeStreamsForVideoId
         if (targetId.isNullOrBlank()) -1
-        else uiState.episodes.indexOfFirst { it.id == targetId }
+        else shownEpisodes.indexOfFirst { it.id == targetId }
     }
-    val currentEpisodeIndex = remember(uiState.episodes, uiState.currentSeason, uiState.currentEpisode) {
-        uiState.episodes.indexOfFirst { episode ->
+    val currentEpisodeIndex = remember(shownEpisodes, uiState.currentSeason, uiState.currentEpisode) {
+        shownEpisodes.indexOfFirst { episode ->
             episode.season == uiState.currentSeason && episode.episode == uiState.currentEpisode
         }
     }
+    var appliedListOrder by remember { mutableStateOf(episodeListOrder) }
+    LaunchedEffect(episodeListOrder) {
+        if (appliedListOrder == episodeListOrder) return@LaunchedEffect
+        appliedListOrder = episodeListOrder
+        if (shownEpisodes.isNotEmpty()) episodesListState.scrollToItem(0)
+    }
 
-    LaunchedEffect(uiState.showEpisodeStreams, uiState.episodes, currentEpisodeIndex) {
+    LaunchedEffect(
+        uiState.showEpisodeStreams,
+        uiState.episodes,
+        uiState.currentSeason,
+        uiState.currentEpisode,
+        uiState.episodeStreamsForVideoId,
+    ) {
         if (uiState.showEpisodeStreams || uiState.episodes.isEmpty()) return@LaunchedEffect
 
         val targetIndex = when {
@@ -589,10 +614,8 @@ private fun EpisodesListView(
         }
 
         else -> {
-            val sortedSeasons = remember(uiState.episodesAvailableSeasons) {
-                val regular = uiState.episodesAvailableSeasons.filter { it > 0 }.sorted()
-                val specials = uiState.episodesAvailableSeasons.filter { it == 0 }
-                regular + specials
+            val sortedSeasons = remember(uiState.episodesAvailableSeasons, episodeListOrder) {
+                uiState.episodesAvailableSeasons.orderedSeasonTabs(episodeListOrder)
             }
 
             Column(modifier = Modifier.fillMaxHeight()) {
@@ -603,6 +626,7 @@ private fun EpisodesListView(
                             seasons = sortedSeasons,
                             selectedSeason = uiState.episodesSelectedSeason,
                             selectedTabFocusRequester = seasonTabFocusRequester,
+                            downFocusRequester = sortFocusRequester,
                             onSeasonSelected = onSeasonSelected
                         )
                     }
@@ -610,15 +634,27 @@ private fun EpisodesListView(
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
                 }
 
+                EpisodeListOrderButton(
+                    order = episodeListOrder,
+                    onOrderSelected = onEpisodeListOrderSelected,
+                    focusRequester = sortFocusRequester,
+                    modifier = Modifier.focusProperties {
+                        if (sortedSeasons.isNotEmpty()) up = seasonTabFocusRequester
+                        down = episodesFocusRequester
+                    },
+                )
+
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+
                 LazyColumn(
                     state = episodesListState,
                     verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
                     contentPadding = PaddingValues(top = NuvioTheme.spacing.xs),
                     modifier = Modifier
                         .fillMaxHeight()
-                        .focusProperties { up = seasonTabFocusRequester }
+                        .focusProperties { up = sortFocusRequester }
                 ) {
-                    itemsIndexed(uiState.episodes) { index, episode ->
+                    itemsIndexed(shownEpisodes) { index, episode ->
                         val isCurrent = episode.season == uiState.currentSeason &&
                             episode.episode == uiState.currentEpisode
                         val requestInitialFocus = when {
@@ -662,7 +698,7 @@ private fun EpisodesListView(
                 episode.episode != uiState.currentEpisode,
             onDismiss = { detailsEpisode = null },
             onNavigateEpisode = { step ->
-                adjacentEpisode(uiState.episodes, episode, step)?.let { detailsEpisode = it }
+                adjacentEpisode(shownEpisodes, episode, step)?.let { detailsEpisode = it }
             },
             onPlay = {
                 detailsEpisode = null
@@ -689,6 +725,7 @@ private fun EpisodesSeasonTabs(
     seasons: List<Int>,
     selectedSeason: Int?,
     selectedTabFocusRequester: FocusRequester,
+    downFocusRequester: FocusRequester? = null,
     onSeasonSelected: (Int) -> Unit
 ) {
     val seasonTabsListState = rememberLazyListState()
@@ -730,6 +767,13 @@ private fun EpisodesSeasonTabs(
                 onClick = { onSeasonSelected(season) },
                 modifier = Modifier
                     .then(if (index == focusEntryIndex) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
+                    .then(
+                        if (isSelected && downFocusRequester != null) {
+                            Modifier.focusProperties { down = downFocusRequester }
+                        } else {
+                            Modifier
+                        }
+                    )
                     .semantics {
                         role = Role.Tab
                         this.selected = isSelected

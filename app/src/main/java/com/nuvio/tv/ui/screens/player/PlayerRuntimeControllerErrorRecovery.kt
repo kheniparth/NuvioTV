@@ -8,14 +8,159 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer
 import com.nuvio.tv.R
 import com.nuvio.tv.core.util.findCause
+import java.net.ConnectException
+import java.net.URLEncoder
+import java.net.UnknownHostException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+internal data class LiveStalkerReady(val url: String, val headers: Map<String, String>)
 
 private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
 private const val RETRY_DELAY_MS = 1_500L
 private const val STABLE_PROGRESS_RESET_DELAY_MS = 5_000L
+private const val LIVE_TV_FORBIDDEN_RETRY_DELAY_MS = 1_000L
+
+/** A live zap can hit the provider's one-stream limit as a 403 while the previous stream closes. */
+internal fun isLiveTvForbiddenRetry(contentType: String?, httpStatus: Int?): Boolean =
+    contentType.equals("channel", ignoreCase = true) && httpStatus == 403
+
+/**
+ * DNS / connection failures on a live channel. These do not recover by auto-retrying the same URL;
+ * show a readable offline message instead of spinning through the generic retry / engine-failover chain.
+ * HTTP 403 is intentionally excluded — that stays on [tryLiveTvForbiddenRetry].
+ */
+internal fun isLiveTvNetworkFailure(contentType: String?, error: PlaybackException): Boolean {
+    if (!contentType.equals("channel", ignoreCase = true)) return false
+    when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> return true
+    }
+    return error.findCause<UnknownHostException>() != null ||
+        error.findCause<ConnectException>() != null
+}
+
+/**
+ * Surfaces a readable offline error for a live channel on the first DNS/connection failure.
+ * Returns true when the error was handled (caller must not continue the retry chain).
+ */
+internal fun PlayerRuntimeController.tryLiveTvNetworkFailure(error: PlaybackException): Boolean {
+    if (!isLiveTvNetworkFailure(contentType, error)) return false
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "Live channel network failure — showing offline error (${error.errorCodeName})"
+    )
+    errorRetryJob?.cancel()
+    errorRetryJob = null
+    _uiState.update {
+        it.copy(
+            error = context.getString(R.string.livetv_error_no_connection),
+            showLoadingOverlay = false,
+            isBuffering = false,
+            showPauseOverlay = false,
+            showPlayerLoadingStatus = false,
+        )
+    }
+    return true
+}
+
+/**
+ * Retries a live channel once after a 403 so a zap that raced the old stream closing recovers.
+ * Returns true when a retry was scheduled.
+ */
+internal fun PlayerRuntimeController.tryLiveTvForbiddenRetry(error: PlaybackException): Boolean {
+    val status = error.findInvalidResponseCodeException()?.responseCode
+    if (tryLiveTvStalkerRetry(status)) return true
+    if (hasRetriedLiveTvForbidden) return false
+    if (!isLiveTvForbiddenRetry(contentType, status)) return false
+    hasRetriedLiveTvForbidden = true
+    val paused = userPausedManually
+
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "Live channel HTTP 403 — retrying once after ${LIVE_TV_FORBIDDEN_RETRY_DELAY_MS}ms"
+    )
+
+    errorRetryJob?.cancel()
+    errorRetryJob = scope.launch {
+        _uiState.update {
+            it.copy(
+                error = null,
+                isBuffering = true,
+                showLoadingOverlay = it.loadingOverlayEnabled,
+                loadingMessage = context.getString(R.string.player_loading_buffering),
+                showPauseOverlay = false
+            )
+        }
+        delay(LIVE_TV_FORBIDDEN_RETRY_DELAY_MS)
+        releasePlayer(flushPlaybackState = false)
+        reinitializeCurrentStream(startPaused = paused)
+    }
+    return true
+}
+
+/** Stalker CDN 403/401: drop the open stream, then play a fresh create_link. Up to three tries. */
+internal fun PlayerRuntimeController.tryLiveTvStalkerRetry(status: Int?): Boolean {
+    if (!contentType.equals("channel", ignoreCase = true)) return false
+    if (status != 403 && status != 401) return false
+    if (!liveChannelIsStalker()) return false
+    val refresh = liveStalkerRefresh ?: return false
+    if (hasRenderedFirstFrame) stalkerFailedAttempts = 0
+    stalkerFailedAttempts++
+    val failed = stalkerFailedAttempts
+    val paused = userPausedManually
+    errorRetryJob?.cancel()
+    errorRetryJob = scope.launch {
+        _uiState.update {
+            it.copy(
+                error = null,
+                isBuffering = true,
+                showLoadingOverlay = true,
+                showPlayerLoadingStatus = true,
+                loadingMessage = context.getString(R.string.livetv_channel_loading),
+                showPauseOverlay = false,
+            )
+        }
+        releasePlayer(flushPlaybackState = false)
+        mpvErrorRecoveryArmed = false
+        val ready = try {
+            refresh(status, failed)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            showStalkerBusy(error.message)
+            return@launch
+        }
+        if (ready == null || ready.url.isBlank()) {
+            showStalkerBusy(null)
+            return@launch
+        }
+        currentStreamUrl = ready.url
+        currentHeaders = ready.headers
+        currentStreamMimeType = null
+        savedStateHandle["streamUrl"] = ready.url
+        savedStateHandle["headers"] = URLEncoder.encode(JSONObject(ready.headers).toString(), "UTF-8").replace("+", "%20")
+        reinitializeCurrentStream(startPaused = paused)
+    }
+    return true
+}
+
+private fun PlayerRuntimeController.showStalkerBusy(detail: String?) {
+    _uiState.update {
+        it.copy(
+            error = context.getString(R.string.livetv_portal_busy).let { busy ->
+                if (detail.isNullOrBlank() || detail == busy) busy else detail
+            },
+            showLoadingOverlay = false,
+            isBuffering = false,
+            showPauseOverlay = false,
+        )
+    }
+}
 
 internal fun PlayerRuntimeController.showRecoveryOverlay() {
     _uiState.update { state ->
@@ -327,6 +472,8 @@ internal fun PlayerRuntimeController.scheduleStableProgressReset() {
         delay(STABLE_PROGRESS_RESET_DELAY_MS)
         val player = _exoPlayer ?: return@launch
         if (player.playbackState == Player.STATE_READY && player.isPlaying) {
+            // Seconds of steady playback confirm a tunneled stream really decodes.
+            tunneledFirstFrameAssumed = false
             resetErrorRetryState()
         }
     }
@@ -532,6 +679,12 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
             }
             reinitializeCurrentStream(startPaused = paused)
         } else {
+            if (tryRefreshExpiredLinkAfterError(detailedError)) {
+                return@launch
+            }
+            if (tryFallbackToNextSourceAfterError(detailedError)) {
+                return@launch
+            }
             if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                 return@launch
             }

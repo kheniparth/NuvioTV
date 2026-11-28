@@ -7,6 +7,17 @@ import com.nuvio.tv.ui.components.canStream
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.R
+import com.nuvio.tv.LocalRootContentInset
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import com.nuvio.tv.core.player.LocalBackgroundTrailerController
+import com.nuvio.tv.ui.screens.home.HOME_HERO_TRAILER_OWNER
+import com.nuvio.tv.ui.components.BackgroundTrailerLayer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
@@ -26,7 +37,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.party.PartyMedia
+import com.nuvio.tv.livetv.ui.OnDemandScreen
 import com.nuvio.tv.domain.model.ExperienceMode
+import com.nuvio.tv.livetv.ui.GuideScreen
 import com.nuvio.tv.data.mediaserver.ServerCatalog
 import com.nuvio.tv.ui.screens.CatalogSeeAllScreen
 import com.nuvio.tv.ui.screens.ExperienceModeSelectionScreen
@@ -35,6 +48,7 @@ import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.home.HomeScreen
 import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
 import com.nuvio.tv.ui.screens.addon.CatalogOrderScreen
+import com.nuvio.tv.livetv.ui.ChannelsScreen
 import com.nuvio.tv.ui.screens.library.LibraryScreen
 import com.nuvio.tv.ui.screens.player.PlayerExitReason
 import com.nuvio.tv.ui.screens.player.PlayerScreen
@@ -44,6 +58,7 @@ import com.nuvio.tv.ui.screens.party.PartyScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
 import com.nuvio.tv.ui.screens.search.DiscoverScreen
 import com.nuvio.tv.ui.screens.search.SearchScreen
+import com.nuvio.tv.livetv.ui.SportsScreen
 import com.nuvio.tv.ui.screens.settings.AboutScreen
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.LicensesAttributionsScreen
@@ -66,7 +81,8 @@ import com.nuvio.tv.ui.screens.home.HeroBackdropState
 fun NuvioNavHost(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
-    hideBuiltInHeaders: Boolean = false
+    hideBuiltInHeaders: Boolean = false,
+    discoverIsRoot: Boolean = false
 ) {
     PlaybackAvailabilityProvider {
         // The NavController keeps its back stack ViewModels in the store of the owner it is
@@ -74,7 +90,27 @@ fun NuvioNavHost(
         val navViewModelStoreOwner = LocalNavViewModelStoreOwner.current
             ?: checkNotNull(LocalViewModelStoreOwner.current)
         CompositionLocalProvider(LocalViewModelStoreOwner provides navViewModelStoreOwner) {
-            PlaybackNavHost(navController, startDestination, hideBuiltInHeaders)
+            Box(modifier = Modifier.fillMaxSize()) {
+                LocalBackgroundTrailerController.current?.let { controller ->
+                    BackgroundTrailerLayer(controller = controller)
+                }
+                PlaybackNavHost(navController, startDestination, hideBuiltInHeaders, discoverIsRoot)
+            }
+        }
+    }
+}
+
+// Root destinations carry the legacy sidebar inset themselves so the NavHost container
+// keeps a constant width while navigating between root and non-root routes.
+private fun NavGraphBuilder.rootComposable(
+    route: String,
+    withInset: Boolean = true,
+    content: @Composable (NavBackStackEntry) -> Unit
+) {
+    composable(route) { backStackEntry ->
+        val inset = if (withInset) LocalRootContentInset.current else 0.dp
+        Box(modifier = Modifier.padding(start = inset)) {
+            content(backStackEntry)
         }
     }
 }
@@ -83,10 +119,19 @@ fun NuvioNavHost(
 private fun PlaybackNavHost(
     navController: NavHostController,
     startDestination: String,
-    hideBuiltInHeaders: Boolean
+    hideBuiltInHeaders: Boolean,
+    discoverIsRoot: Boolean
 ) {
     val playbackAvailability = LocalPlaybackAvailability.current
     val context = LocalContext.current
+    val backgroundTrailerController = LocalBackgroundTrailerController.current
+    fun isLeavingFramedHeroTrailer(): Boolean {
+        val controller = backgroundTrailerController ?: return false
+        return controller.activeRequest?.bounds != null &&
+            controller.isRenderingFor(HOME_HERO_TRAILER_OWNER) &&
+            !controller.isPinned(HOME_HERO_TRAILER_OWNER)
+    }
+
     fun isStreamToPlayer(from: String, to: String): Boolean {
         return from.startsWith("stream/") && to.startsWith("player/")
     }
@@ -138,6 +183,8 @@ private fun PlaybackNavHost(
                 ?.toBooleanStrictOrNull() == true
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 ExitTransition.None
+            } else if (isLeavingFramedHeroTrailer()) {
+                fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium), targetAlpha = 1f)
             } else {
                 fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.medium))
             }
@@ -192,7 +239,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Home.route) {
+        rootComposable(Screen.Home.route) {
             fun createContinueWatchingRoute(
                 item: ContinueWatchingItem,
                 manualSelection: Boolean = false,
@@ -693,7 +740,8 @@ private fun PlaybackNavHost(
                                 contentLanguage = playbackInfo.contentLanguage,
                                 profileId = playbackInfo.profileId,
                                 audioDelayMs = playbackInfo.audioDelayMs,
-                                audioDelayLanguage = playbackInfo.audioDelayLanguage
+                                audioDelayLanguage = playbackInfo.audioDelayLanguage,
+                                fromLinkCache = playbackInfo.fromLinkCache
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -782,6 +830,11 @@ private fun PlaybackNavHost(
                     defaultValue = null
                 },
                 navArgument("autoPlayNav") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
+                },
+                navArgument("fromLinkCache") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
@@ -1145,6 +1198,23 @@ private fun PlaybackNavHost(
                     )
                 },
                 onOpenPartyMedia = ::openPartyMedia,
+                onSwitchLiveChannel = { request ->
+                    val playerId = navController.currentDestination?.id
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = request.streamUrl,
+                            title = request.title,
+                            headers = request.headers,
+                            contentType = "channel",
+                            logo = request.logoUrl,
+                            poster = request.logoUrl,
+                        )
+                    ) {
+                        if (playerId != null) {
+                            popUpTo(playerId) { inclusive = true }
+                        }
+                    }
+                },
                 onPlaybackErrorBack = {
                     val returnedToStream = popBackToStream()
                     if (!returnedToStream) {
@@ -1189,7 +1259,24 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Search.route) { backStackEntry ->
+        rootComposable(Screen.LiveTv.route) {
+            ChannelsScreen(
+                onPlay = { request ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = request.streamUrl,
+                            title = request.title,
+                            headers = request.headers,
+                            contentType = "channel",
+                            logo = request.logoUrl,
+                            poster = request.logoUrl,
+                        )
+                    )
+                }
+            )
+        }
+
+        rootComposable(Screen.Search.route) { backStackEntry ->
             val searchViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel(backStackEntry)
             SearchScreen(
@@ -1214,7 +1301,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Discover.route) {
+        rootComposable(Screen.Discover.route, withInset = discoverIsRoot) {
             DiscoverScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
@@ -1231,7 +1318,7 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Library.route) {
+        rootComposable(Screen.Library.route) {
             LibraryScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
@@ -1264,7 +1351,28 @@ private fun PlaybackNavHost(
             )
         }
 
-        composable(Screen.Settings.route) {
+        rootComposable(Screen.LiveTvOnDemand.route) {
+            OnDemandScreen(
+                onPlay = { playback ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playback.streamUrl,
+                            title = playback.title,
+                            headers = playback.headers,
+                            contentType = playback.contentType,
+                            contentName = playback.title,
+                            poster = playback.posterUrl,
+                            season = playback.seasonNumber,
+                            episode = playback.episodeNumber,
+                            episodeTitle = playback.episodeTitle
+                        )
+                    )
+                },
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        rootComposable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
@@ -1326,6 +1434,41 @@ private fun PlaybackNavHost(
         composable(Screen.PlaybackSettings.route) {
             PlaybackSettingsScreen(
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        rootComposable(Screen.LiveTvSports.route) {
+            SportsScreen(
+                onBackPress = { navController.popBackStack() },
+                onPlay = { url, headers, title ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = url,
+                            title = title,
+                            headers = headers,
+                            contentType = "channel",
+                            contentName = title,
+                        )
+                    )
+                },
+            )
+        }
+
+        rootComposable(Screen.LiveTvGuide.route) {
+            GuideScreen(
+                onPlayChannel = { channel, playable ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = playable.url,
+                            title = channel.name,
+                            headers = playable.headers,
+                            contentId = channel.id,
+                            contentType = "channel",
+                            contentName = channel.name,
+                            logo = channel.logoUrl
+                        )
+                    )
+                }
             )
         }
 

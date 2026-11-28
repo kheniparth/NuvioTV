@@ -1,9 +1,14 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.data.repository.AddonEventDispatcher
+import com.nuvio.tv.livetv.data.StalkerPortalBusy
+import com.nuvio.tv.livetv.ui.LiveTvPlaybackSession
+import com.nuvio.tv.livetv.ui.applyResolvedLiveChannel
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.update
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.core.debrid.DirectDebridResolver
 import com.nuvio.tv.core.debrid.DirectDebridStreamPreparer
@@ -59,6 +64,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val parentalGuideRepository: ParentalGuideRepository,
     private val trackingScrobbleCoordinator: TrackingScrobbleCoordinator,
+    private val addonEventDispatcher: AddonEventDispatcher,
     private val traktEpisodeMappingService: TraktEpisodeMappingService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -102,6 +108,7 @@ class PlayerViewModel @Inject constructor(
     private val serverStreams: com.nuvio.tv.data.mediaserver.ServerStreams,
     partyRepository: com.nuvio.tv.core.party.PartyRepository,
     profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    livePlayback: LiveTvPlaybackSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -109,6 +116,7 @@ class PlayerViewModel @Inject constructor(
         // Release trailer player codec resources so the full-screen player can
         // claim hardware decoders without contention (prevents black screen).
         trailerPlayerPool.yield()
+        savedStateHandle.applyResolvedLiveChannel(livePlayback)
     }
 
     internal val controller = PlayerRuntimeController(
@@ -121,6 +129,7 @@ class PlayerViewModel @Inject constructor(
         subtitleRepository = subtitleRepository,
         parentalGuideRepository = parentalGuideRepository,
         trackingScrobbleCoordinator = trackingScrobbleCoordinator,
+        addonEventDispatcher = addonEventDispatcher,
         traktEpisodeMappingService = traktEpisodeMappingService,
         skipIntroRepository = skipIntroRepository,
         playerSettingsDataStore = playerSettingsDataStore,
@@ -158,6 +167,23 @@ class PlayerViewModel @Inject constructor(
 
     init {
         controller.bindParty()
+        controller.liveChannelIsStalker = { livePlayback.currentIsStalker() }
+        controller.liveStalkerRefresh = { status, attempt ->
+            try {
+                val request = livePlayback.refreshAfterForbidden(status, attempt)
+                if (request == null) null else LiveStalkerReady(request.streamUrl, request.headers)
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: StalkerPortalBusy) {
+                null
+            }
+        }
+    }
+
+    fun showLiveTvError(message: String) {
+        controller._uiState.update {
+            it.copy(error = message, showLoadingOverlay = false, isBuffering = false, showPauseOverlay = false)
+        }
     }
 
     val party: com.nuvio.tv.core.party.PartyRepository

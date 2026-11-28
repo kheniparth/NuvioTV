@@ -7,9 +7,30 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Base64
 
 class PlayerMediaSourceFactoryTest {
+
+    @Test
+    fun `dns and connect failures fail fast without load retries`() {
+        assertTrue(
+            shouldFailFastNetworkLoadError(
+                UnknownHostException("Unable to resolve host \"example.invalid\"")
+            )
+        )
+        assertTrue(
+            shouldFailFastNetworkLoadError(
+                IOException("open failed", UnknownHostException("example.invalid"))
+            )
+        )
+        assertTrue(shouldFailFastNetworkLoadError(ConnectException("Connection refused")))
+        assertFalse(shouldFailFastNetworkLoadError(SocketTimeoutException("timeout")))
+        assertFalse(shouldFailFastNetworkLoadError(IOException("other")))
+    }
 
     @Test
     fun `media segment 404 with an alternative prefers another HLS track`() {
@@ -80,6 +101,35 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(MimeTypes.APPLICATION_M3U8, mimeType)
+    }
+
+    @Test
+    fun `inferMimeType recognizes percent encoded DASH MIME query values`() {
+        for (key in listOf("format", "mime", "mime_type", "content_type", "type")) {
+            val url = "https://example.com/playback?$key=application%2Fdash%2Bxml"
+            assertEquals(
+                url,
+                MimeTypes.APPLICATION_MPD,
+                PlayerMediaSourceFactory.inferMimeType(url = url, filename = null)
+            )
+        }
+    }
+
+    @Test
+    fun `inferMimeType preserves literal MIME plus signs and tolerates invalid escapes`() {
+        assertEquals(
+            MimeTypes.APPLICATION_MPD,
+            PlayerMediaSourceFactory.inferMimeType(
+                url = "https://example.com/playback?mime=application/dash+xml",
+                filename = null
+            )
+        )
+        assertNull(
+            PlayerMediaSourceFactory.inferMimeType(
+                url = "https://example.com/playback?mime=%ZZ",
+                filename = null
+            )
+        )
     }
 
     @Test
